@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ntu.cloudgui.app.controller.FilesController">
+
+    <top>
+        <HBox spacing="10">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+
+            <TextField fx:id="fileNameField" promptText="File name"/>
+
+            <Button text="New" onAction="#handleCreate"/>
+            <Button text="Save" onAction="#handleSave"/>
+            <Button text="Delete" onAction="#handleDelete"/>
+            <Button text="Share" onAction="#handleShare"/>
+
+            <Button text="Upload" onAction="#handleUpload"/>
+            <Button text="Download" onAction="#handleDownload"/>
+        </HBox>
+    </top>
+
+    <left>
+        <ListView fx:id="filesList"/>
+    </left>
+
+    <center>
+        <TextArea fx:id="contentArea"/>
+    </center>
+
+</BorderPane>

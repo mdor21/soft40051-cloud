@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ntu.cloudgui.app.controller.LogsController">
+
+    <center>
+        <TableView fx:id="logsTable">
+            <columns>
+                <TableColumn text="Time" fx:id="timeCol"/>
+                <TableColumn text="User" fx:id="userCol"/>
+                <TableColumn text="Action" fx:id="actionCol"/>
+                <TableColumn text="Details" fx:id="detailsCol"/>
+                <TableColumn text="Success" fx:id="successCol"/>
+            </columns>
+        </TableView>
+    </center>
+
+</BorderPane>

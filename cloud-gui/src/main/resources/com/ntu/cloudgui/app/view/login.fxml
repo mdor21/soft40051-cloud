@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.Button?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ntu.cloudgui.app.controller.LoginController"
+            prefWidth="960" prefHeight="600" styleClass="root">
+    <center>
+        <VBox alignment="CENTER" spacing="10" styleClass="card">
+            <Label text="Cloud Login" styleClass="title"/>
+            <TextField fx:id="usernameField" promptText="Username"/>
+            <PasswordField fx:id="passwordField" promptText="Password"/>
+            <Button text="Login" onAction="#handleLogin"/>
+            <Label fx:id="errorLabel" styleClass="error-label"/>
+        </VBox>
+    </center>
+</BorderPane>

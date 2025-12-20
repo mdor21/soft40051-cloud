@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.ntu.cloudgui.app.controller.RemoteTerminalController"
+      spacing="5">
+    <padding>
+        <Insets top="10" right="10" bottom="10" left="10"/>
+    </padding>
+
+    <HBox spacing="5">
+        <TextField fx:id="hostField" promptText="Host (file server container)"/>
+        <TextField fx:id="portField" promptText="Port" text="22"/>
+        <TextField fx:id="userField" promptText="User"/>
+        <PasswordField fx:id="passwordField" promptText="Password"/>
+    </HBox>
+
+    <TextArea fx:id="remoteOutputArea" editable="false" prefRowCount="20"/>
+
+    <HBox spacing="5">
+        <TextField fx:id="remoteCommandField" promptText="Remote command"/>
+        <Button text="Run" onAction="#handleRun"/>
+    </HBox>
+</VBox>

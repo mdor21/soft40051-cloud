@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ChoiceBox?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.ntu.cloudgui.app.controller.UsersController">
+
+    <top>
+        <HBox spacing="10">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+            <TextField fx:id="newUserField" promptText="Username"/>
+            <PasswordField fx:id="newPasswordField" promptText="Password"/>
+            <ChoiceBox fx:id="roleChoice"/>
+            <Button text="Create" onAction="#handleCreateUser"/>
+        </HBox>
+    </top>
+
+    <center>
+        <TableView fx:id="usersTable">
+            <columns>
+                <TableColumn text="Username" fx:id="usernameCol"/>
+                <TableColumn text="Role" fx:id="roleCol"/>
+            </columns>
+        </TableView>
+    </center>
+
+    <bottom>
+        <HBox spacing="10">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+            <Button text="Promote to Admin" onAction="#handlePromote"/>
+            <Button text="Demote to Standard" onAction="#handleDemote"/>
+            <Button text="Delete" onAction="#handleDelete"/>
+        </HBox>
+    </bottom>
+
+</BorderPane>
