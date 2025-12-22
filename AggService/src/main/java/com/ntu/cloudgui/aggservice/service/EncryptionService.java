@@ -1,6 +1,7 @@
 package com.ntu.cloudgui.aggservice.service;
 
 import com.ntu.cloudgui.aggservice.exception.ProcessingException;
+import com.ntu.cloudgui.aggservice.exception.ErrorType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -95,7 +96,7 @@ public class EncryptionService {
         } catch (Exception e) {
             logger.error("✗ Failed to generate encryption key: {}", e.getMessage(), e);
             throw new ProcessingException(
-                ProcessingException.ErrorType.ENCRYPTION_ERROR,
+                ErrorType.ENCRYPTION_ERROR,
                 "Failed to generate encryption key: " + e.getMessage(),
                 e
             );
@@ -150,7 +151,7 @@ public class EncryptionService {
         } catch (Exception e) {
             logger.error("✗ Encryption failed: {}", e.getMessage(), e);
             throw new ProcessingException(
-                ProcessingException.ErrorType.ENCRYPTION_ERROR,
+                ErrorType.ENCRYPTION_ERROR,
                 "Encryption failed: " + e.getMessage(),
                 e
             );
@@ -181,7 +182,7 @@ public class EncryptionService {
             // Validate minimum size (IV + at least 1 byte ciphertext + tag)
             if (encryptedData.length < IV_SIZE + 16) {
                 throw new ProcessingException(
-                    ProcessingException.ErrorType.ENCRYPTION_ERROR,
+                    ErrorType.ENCRYPTION_ERROR,
                     "Invalid encrypted data: too short"
                 );
             }
@@ -214,7 +215,7 @@ public class EncryptionService {
             logger.error("✗ Authentication tag verification failed (data corrupted): {}", 
                         e.getMessage());
             throw new ProcessingException(
-                ProcessingException.ErrorType.ENCRYPTION_ERROR,
+                ErrorType.ENCRYPTION_ERROR,
                 "Data integrity check failed - data may be corrupted",
                 e
             );
@@ -222,7 +223,7 @@ public class EncryptionService {
         } catch (Exception e) {
             logger.error("✗ Decryption failed: {}", e.getMessage(), e);
             throw new ProcessingException(
-                ProcessingException.ErrorType.ENCRYPTION_ERROR,
+                ErrorType.ENCRYPTION_ERROR,
                 "Decryption failed: " + e.getMessage(),
                 e
             );
@@ -261,7 +262,7 @@ public class EncryptionService {
             // Validate key size
             if (decodedKey.length != KEY_SIZE / 8) {
                 throw new ProcessingException(
-                    ProcessingException.ErrorType.ENCRYPTION_ERROR,
+                    ErrorType.ENCRYPTION_ERROR,
                     String.format("Invalid key size: expected %d bytes, got %d", 
                                  KEY_SIZE / 8, decodedKey.length)
                 );
@@ -271,7 +272,7 @@ public class EncryptionService {
             
         } catch (IllegalArgumentException e) {
             throw new ProcessingException(
-                ProcessingException.ErrorType.ENCRYPTION_ERROR,
+                ErrorType.ENCRYPTION_ERROR,
                 "Invalid base64 key format: " + e.getMessage(),
                 e
             );

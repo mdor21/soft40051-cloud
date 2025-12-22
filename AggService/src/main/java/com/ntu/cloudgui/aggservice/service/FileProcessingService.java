@@ -1,6 +1,7 @@
 package com.ntu.cloudgui.aggservice.service;
 
 import com.ntu.cloudgui.aggservice.exception.ProcessingException;
+import com.ntu.cloudgui.aggservice.exception.ErrorType;
 import com.ntu.cloudgui.aggservice.exception.DatabaseException;
 import com.ntu.cloudgui.aggservice.model.FileMetadata;
 import com.ntu.cloudgui.aggservice.model.ChunkMetadata;
@@ -185,7 +186,7 @@ public class FileProcessingService {
         
         if (fileMetadata == null) {
             throw new ProcessingException(
-                ProcessingException.ErrorType.FILE_NOT_FOUND,
+                ErrorType.FILE_NOT_FOUND,
                 String.format("File not found: %s", fileId)
             );
         }
@@ -263,7 +264,7 @@ public class FileProcessingService {
         // Check file exists
         if (!file.exists()) {
             throw new ProcessingException(
-                ProcessingException.ErrorType.INVALID_FILE,
+                ErrorType.INVALID_FILE,
                 "File does not exist: " + file.getName()
             );
         }
@@ -271,7 +272,7 @@ public class FileProcessingService {
         // Check file is readable
         if (!file.canRead()) {
             throw new ProcessingException(
-                ProcessingException.ErrorType.INVALID_FILE,
+                ErrorType.INVALID_FILE,
                 "File is not readable: " + file.getName()
             );
         }
@@ -279,7 +280,7 @@ public class FileProcessingService {
         // Check file is not empty
         if (file.length() == 0) {
             throw new ProcessingException(
-                ProcessingException.ErrorType.INVALID_FILE,
+                ErrorType.INVALID_FILE,
                 "File is empty: " + file.getName()
             );
         }
@@ -287,7 +288,7 @@ public class FileProcessingService {
         // Check file size within limits
         if (file.length() > MAX_FILE_SIZE) {
             throw new ProcessingException(
-                ProcessingException.ErrorType.FILE_TOO_LARGE,
+                ErrorType.FILE_TOO_LARGE,
                 String.format("File exceeds maximum size (%d bytes): %s", 
                              MAX_FILE_SIZE, file.getName())
             );
@@ -356,7 +357,7 @@ public class FileProcessingService {
         } catch (IOException e) {
             logger.error("✗ Failed to read file: {}", e.getMessage(), e);
             throw new ProcessingException(
-                ProcessingException.ErrorType.FILE_READ_ERROR,
+                ErrorType.FILE_READ_ERROR,
                 "Failed to read file: " + e.getMessage(),
                 e
             );

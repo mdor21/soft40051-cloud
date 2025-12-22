@@ -1,6 +1,7 @@
 package com.ntu.cloudgui.aggservice.service;
 
 import com.ntu.cloudgui.aggservice.exception.ProcessingException;
+import com.ntu.cloudgui.aggservice.exception.ErrorType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,7 +74,7 @@ public class CrcValidationService {
         } catch (Exception e) {
             logger.error("✗ CRC32 calculation failed: {}", e.getMessage(), e);
             throw new ProcessingException(
-                ProcessingException.ErrorType.VALIDATION_ERROR,
+                ErrorType.VALIDATION_ERROR,
                 "CRC32 calculation failed: " + e.getMessage(),
                 e
             );
@@ -101,7 +102,7 @@ public class CrcValidationService {
                         calculatedCrc, expectedCrc);
             
             throw new ProcessingException(
-                ProcessingException.ErrorType.VALIDATION_ERROR,
+                ErrorType.VALIDATION_ERROR,
                 String.format("Data corruption detected: CRC32 mismatch (got %d, expected %d)", 
                              calculatedCrc, expectedCrc)
             );

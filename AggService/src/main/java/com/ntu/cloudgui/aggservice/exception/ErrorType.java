@@ -1,22 +1,26 @@
 package com.ntu.cloudgui.aggservice.exception;
 
 public enum ErrorType {
-    ENCRYPTION_FAILED("ENCRYPTION_FAILED"),
-    DECRYPTION_FAILED("DECRYPTION_FAILED"),
-    CHUNK_STORAGE_ERROR("CHUNK_STORAGE_ERROR"),
-    CRC_VALIDATION_ERROR("CRC_VALIDATION_ERROR"),
-    SFTP_CONNECTION_ERROR("SFTP_CONNECTION_ERROR"),
-    FILE_NOT_FOUND("FILE_NOT_FOUND"),
-    INVALID_INPUT("INVALID_INPUT"),
-    UNKNOWN_ERROR("UNKNOWN_ERROR");
+    STORAGE_ERROR("Storage operation failed"),
+    VALIDATION_ERROR("Validation failed"),
+    ENCRYPTION_ERROR("Encryption/Decryption failed"),
+    INVALID_FILE("Invalid file"),
+    FILE_TOO_LARGE("File size exceeds limit"),
+    FILE_READ_ERROR("Failed to read file"),
+    FILE_NOT_FOUND("File not found"),
+    PROCESSING_ERROR("Processing failed"),
+    NETWORK_ERROR("Network operation failed"),
+    DATABASE_ERROR("Database operation failed"),
+    CONFIGURATION_ERROR("Configuration error"),
+    AUTHENTICATION_ERROR("Authentication failed");
 
-    private final String code;
+    private final String message;
 
-    ErrorType(String code) {
-        this.code = code;
+    ErrorType(String message) {
+        this.message = message;
     }
 
-    public String getCode() {
-        return code;
+    public String getMessage() {
+        return message;
     }
 }

@@ -1,23 +1,40 @@
 package com.ntu.cloudgui.aggservice.config;
 
 import com.jcraft.jsch.ChannelSftp;
-import lombok.Data;
+import com.jcraft.jsch.Session;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+@Getter
+@Setter
 public class SftpConnection {
-    private ChannelSftp sftp;
+    private final Session session;
+    private final ChannelSftp channel;
+    private final String host;
     private long lastUsed;
 
-    public SftpConnection(ChannelSftp sftp) {
-        this.sftp = sftp;
-        this.lastUsed = System.currentTimeMillis();
-    }
-
-    public void updateLastUsed() {
+    public SftpConnection(Session session, ChannelSftp channel, String host) {
+        this.session = session;
+        this.channel = channel;
+        this.host = host;
         this.lastUsed = System.currentTimeMillis();
     }
 
     public boolean isConnected() {
-        return sftp != null && sftp.isConnected();
+        return session != null && session.isConnected() 
+            && channel != null && channel.isConnected();
+    }
+
+    public void disconnect() {
+        if (channel != null && channel.isConnected()) {
+            channel.disconnect();
+        }
+        if (session != null && session.isConnected()) {
+            session.disconnect();
+        }
+    }
+
+    public void updateLastUsed() {
+        this.lastUsed = System.currentTimeMillis();
     }
 }

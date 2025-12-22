@@ -4,7 +4,11 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Autowired;
 
+import jakarta.annotation.PreDestroy;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -22,6 +26,7 @@ import java.sql.Statement;
  * - Provide connections to repositories
  * - Handle graceful shutdown
  */
+@Configuration
 public class DatabaseConfig {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseConfig.class);
     
@@ -33,6 +38,7 @@ public class DatabaseConfig {
      * 
      * @param appConfig Application configuration with database credentials
      */
+    @Autowired
     public DatabaseConfig(AppConfig appConfig) {
         this.appConfig = appConfig;
         this.dataSource = createHikariPool();
@@ -92,7 +98,7 @@ public class DatabaseConfig {
      */
     private String buildJdbcUrl() {
         return String.format(
-            "jdbc:mysql://%s:%s/%s?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true",
+            "jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true",
             appConfig.getDbHost(),
             appConfig.getDbPort(),
             appConfig.getDbName()
@@ -187,6 +193,7 @@ public class DatabaseConfig {
      * 
      * @return HikariDataSource instance
      */
+    @Bean
     public HikariDataSource getDataSource() {
         return dataSource;
     }
@@ -206,6 +213,7 @@ public class DatabaseConfig {
      * Called at application shutdown.
      * Closes all connections in pool and releases resources.
      */
+    @PreDestroy
     public void close() {
         if (dataSource != null && !dataSource.isClosed()) {
             logger.info("Closing database connection pool...");

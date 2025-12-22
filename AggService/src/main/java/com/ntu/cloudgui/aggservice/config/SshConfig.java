@@ -3,6 +3,7 @@ package com.ntu.cloudgui.aggservice.config;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
+import org.springframework.context.annotation.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
  * - Manage SSH connection properties
  * - Handle connection timeouts and retries
  */
+@Configuration
 public class SshConfig {
     private static final Logger logger = LoggerFactory.getLogger(SshConfig.class);
     

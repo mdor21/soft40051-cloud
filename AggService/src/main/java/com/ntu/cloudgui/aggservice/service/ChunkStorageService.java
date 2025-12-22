@@ -2,6 +2,7 @@ package com.ntu.cloudgui.aggservice.service;
 
 import com.ntu.cloudgui.aggservice.config.SftpConfig;
 import com.ntu.cloudgui.aggservice.exception.ProcessingException;
+import com.ntu.cloudgui.aggservice.exception.ErrorType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,7 +90,7 @@ public class ChunkStorageService {
         
         if (servers.isEmpty()) {
             throw new ProcessingException(
-                ProcessingException.ErrorType.STORAGE_ERROR,
+                ErrorType.STORAGE_ERROR,
                 "No storage servers available"
             );
         }
@@ -156,7 +157,7 @@ public class ChunkStorageService {
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         throw new ProcessingException(
-                            ProcessingException.ErrorType.STORAGE_ERROR,
+                            ErrorType.STORAGE_ERROR,
                             "Upload interrupted",
                             ie
                         );
@@ -212,7 +213,7 @@ public class ChunkStorageService {
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         throw new ProcessingException(
-                            ProcessingException.ErrorType.STORAGE_ERROR,
+                            ErrorType.STORAGE_ERROR,
                             "Download interrupted",
                             ie
                         );
@@ -254,7 +255,7 @@ public class ChunkStorageService {
         } catch (Exception e) {
             logger.error("✗ Failed to delete chunk: {}", e.getMessage(), e);
             throw new ProcessingException(
-                ProcessingException.ErrorType.STORAGE_ERROR,
+                ErrorType.STORAGE_ERROR,
                 "Failed to delete chunk: " + e.getMessage(),
                 e
             );
@@ -301,7 +302,7 @@ public class ChunkStorageService {
         } catch (Exception e) {
             logger.error("✗ SFTP upload failed: {}", e.getMessage(), e);
             throw new ProcessingException(
-                ProcessingException.ErrorType.STORAGE_ERROR,
+                ErrorType.STORAGE_ERROR,
                 "SFTP upload failed: " + e.getMessage(),
                 e
             );
@@ -344,7 +345,7 @@ public class ChunkStorageService {
         } catch (Exception e) {
             logger.error("✗ SFTP download failed: {}", e.getMessage(), e);
             throw new ProcessingException(
-                ProcessingException.ErrorType.STORAGE_ERROR,
+                ErrorType.STORAGE_ERROR,
                 "SFTP download failed: " + e.getMessage(),
                 e
             );

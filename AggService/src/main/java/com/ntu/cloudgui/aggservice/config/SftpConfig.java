@@ -1,24 +1,20 @@
 package com.ntu.cloudgui.aggservice.config;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
-
-import java.util.List;
+import org.springframework.context.annotation.Configuration;
 
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Component
+@Configuration
 @ConfigurationProperties(prefix = "sftp")
 public class SftpConfig {
     private String host;
-    private int port = 22;
+    private int port;
     private String username;
     private String password;
-    private String remoteDir = "/data/chunks";
+    private String[] serverHosts;
     private int connectionTimeout = 30000;
-    private List<String> serverHosts;
+    private String baseDirectory = "/uploads";
+    private int maxPoolSize = 10;
+    private int minIdleConnections = 2;
 }
