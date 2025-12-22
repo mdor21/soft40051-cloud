@@ -6,11 +6,10 @@ import java.sql.SQLException;
 
 public class MySqlConnectionManager {
 
-    // MySQL is exposed on the host at 3306 and forwarded into the VM
-    // In the lab image this is usually reachable as 127.0.0.1:3306
-    private static final String HOST = "127.0.0.1";      // NOT "lamp-server" inside the VM
+    // MySQL container name reachable on the shared Docker network
+    private static final String HOST = "lamp-server";  // Docker service/container name
     private static final int    PORT = 3306;
-    private static final String DB   = "cloud_gui";      // your schema name
+    private static final String DB   = "cloud_gui";    // your schema name
     private static final String USER = "admin";
     private static final String PASS = "om2YVGGmQAnE";
 

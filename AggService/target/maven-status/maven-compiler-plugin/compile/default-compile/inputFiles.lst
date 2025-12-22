@@ -1,0 +1,13 @@
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/AggService.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/config/DatabaseConfig.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/config/SshConfig.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/controller/FileController.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/exception/FileProcessingException.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/exception/StorageException.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/model/ChunkMetadata.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/model/FileMetadata.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/repository/ChunkMetadataRepository.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/repository/FileMetadataRepository.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/service/ChunkStorageService.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/service/FileProcessingService.java
+/home/ntu-user/soft40051-cloud/AggService/src/main/java/com/ntu/cloudgui/aggservice/service/MetadataService.java

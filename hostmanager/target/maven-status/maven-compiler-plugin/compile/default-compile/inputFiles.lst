@@ -1,0 +1,9 @@
+/home/ntu-user/soft40051-cloud/hostmanager/src/main/java/com/ntu/cloudgui/hostmanager/Hostmanager.java
+/home/ntu-user/soft40051-cloud/hostmanager/src/main/java/com/ntu/cloudgui/hostmanager/config/DockerConfig.java
+/home/ntu-user/soft40051-cloud/hostmanager/src/main/java/com/ntu/cloudgui/hostmanager/config/MqttConfig.java
+/home/ntu-user/soft40051-cloud/hostmanager/src/main/java/com/ntu/cloudgui/hostmanager/docker/DockerCommandBuilder.java
+/home/ntu-user/soft40051-cloud/hostmanager/src/main/java/com/ntu/cloudgui/hostmanager/docker/DockerService.java
+/home/ntu-user/soft40051-cloud/hostmanager/src/main/java/com/ntu/cloudgui/hostmanager/mqtt/MqttClientService.java
+/home/ntu-user/soft40051-cloud/hostmanager/src/main/java/com/ntu/cloudgui/hostmanager/mqtt/ScalingMessageHandler.java
+/home/ntu-user/soft40051-cloud/hostmanager/src/main/java/com/ntu/cloudgui/hostmanager/util/LogUtil.java
+/home/ntu-user/soft40051-cloud/hostmanager/src/main/java/com/ntu/cloudgui/hostmanager/util/ScalingRequest.java

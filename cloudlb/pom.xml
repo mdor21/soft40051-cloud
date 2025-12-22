@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
@@ -12,12 +13,12 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Compile for Java 21 (>= 20 requirement) -->
+        <!-- Compile against Java 21 -->
         <maven.compiler.release>21</maven.compiler.release>
     </properties>
 
     <dependencies>
-        <!-- MQTT client -->
+        <!-- Eclipse Paho MQTT client -->
         <dependency>
             <groupId>org.eclipse.paho</groupId>
             <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
@@ -27,7 +28,7 @@
 
     <build>
         <plugins>
-            <!-- Compile with Java 21 -->
+            <!-- Java compiler configuration -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -37,7 +38,7 @@
                 </configuration>
             </plugin>
 
-            <!-- Build executable fat jar with all dependencies -->
+            <!-- Build executable fat JAR with all dependencies -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
