@@ -1,189 +1,210 @@
 package com.ntu.cloudgui.cloudlb;
 
-import com.ntu.cloudgui.cloudlb.cluster.HealthChecker;
-import com.ntu.cloudgui.cloudlb.cluster.NodeRegistry;
-import com.ntu.cloudgui.cloudlb.cluster.StorageNode;
-import com.ntu.cloudgui.cloudlb.core.LoadBalancerWorker;
-import com.ntu.cloudgui.cloudlb.core.Request;
-import com.ntu.cloudgui.cloudlb.core.RequestQueue;
-import com.ntu.cloudgui.cloudlb.core.RoundRobinScheduler;
-import com.ntu.cloudgui.cloudlb.core.Scheduler;
-import com.ntu.cloudgui.cloudlb.scaling.ScalingService;
-import com.sun.net.httpserver.HttpContext;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
-import org.eclipse.paho.client.mqttv3.MqttException;
+import com.ntu.cloudgui.cloudlb.core.*;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-
+/**
+ * MainLb - Load Balancer Entry Point
+ * 
+ * Initializes and starts the complete load balancing system:
+ * - Creates RequestQueue (thread-safe request buffer)
+ * - Initializes NodeRegistry (storage node management)
+ * - Registers storage nodes from configuration
+ * - Selects and initializes Scheduler (FCFS/SJN/RoundRobin)
+ * - Starts HealthChecker (monitors node health every 5 seconds)
+ * - Starts LoadBalancerWorker (processes requests from queue)
+ * - Starts HTTP API server
+ * 
+ * Configuration via environment variables:
+ * - NODE_COUNT: Number of storage nodes (default: 2)
+ * - SCHEDULER_TYPE: Scheduling algorithm (FCFS/SJN/ROUNDROBIN, default: ROUNDROBIN)
+ * 
+ * Usage:
+ * ```
+ * # Default (2 nodes, RoundRobin)
+ * java -jar cloudlb-1.0-SNAPSHOT.jar
+ * 
+ * # Custom (4 nodes, FCFS)
+ * NODE_COUNT=4 SCHEDULER_TYPE=FCFS java -jar cloudlb-1.0-SNAPSHOT.jar
+ * ```
+ */
 public class MainLb {
 
-    private static final int HTTP_PORT = 8080;
+    // Configuration constants
+    private static final int DEFAULT_NODE_COUNT = 2;
+    private static final String DEFAULT_SCHEDULER = "ROUNDROBIN";
+    private static final int API_SERVER_PORT = 8080;
+    private static final int HEALTH_CHECK_INTERVAL_MS = 5000;  // 5 seconds
 
-    private static final String MQTT_BROKER_URL =
-            System.getenv().getOrDefault("MQTT_BROKER_URL", "tcp://mqtt-broker:1883");
-    private static final String MQTT_TOPIC =
-            System.getenv().getOrDefault("MQTT_SCALE_TOPIC", "lb/scale/request");
+    // Node configuration
+    private static final String[] NODE_NAMES = {
+        "node-1", "node-2", "node-3", "node-4", "node-5"
+    };
+    
+    private static final String[] NODE_ADDRESSES = {
+        "aggservice-1:8080",
+        "aggservice-2:8080",
+        "aggservice-3:8080",
+        "aggservice-4:8080",
+        "aggservice-5:8080"
+    };
 
-    public static void main(String[] args) throws Exception {
-        RequestQueue requestQueue = new RequestQueue();
-        NodeRegistry registry = new NodeRegistry();
-        Scheduler scheduler = new RoundRobinScheduler(); // or FcfsScheduler / SjnScheduler
-
-        // Register sample storage nodes (adjust hostnames to your Docker compose)
-        registry.addNode(new StorageNode("node-1", "aggservice-1", 8080));
-        registry.addNode(new StorageNode("node-2", "aggservice-2", 8080));
-
-        ScheduledExecutorService exec = Executors.newScheduledThreadPool(4);
-
-        // Health checks
-        HealthChecker healthChecker = new HealthChecker(registry, exec);
-        healthChecker.start(5); // seconds
-
-        // Worker that pulls from queue and forwards to healthy node
-        LoadBalancerWorker worker = new LoadBalancerWorker(requestQueue, registry, scheduler);
-        exec.submit(worker);
-
-        // Scaling over MQTT (optional)
+    /**
+     * Main entry point for Load Balancer.
+     * 
+     * @param args Command line arguments (not used; config via env vars)
+     */
+    public static void main(String[] args) {
         try {
-            String clientId = "lb-client-" + UUID.randomUUID();
-            ScalingService scaling = new ScalingService(
-                    requestQueue,
-                    MQTT_BROKER_URL,
-                    clientId,
-                    MQTT_TOPIC
-            );
-            exec.scheduleAtFixedRate(
-                    scaling::checkAndScale,
-                    10,
-                    10,
-                    TimeUnit.SECONDS
-            );
-        } catch (MqttException e) {
+            System.out.println("========================================");
+            System.out.println("[Main] Starting Load Balancer...");
+            System.out.println("========================================");
+
+            // Parse configuration
+            int nodeCount = getNodeCount();
+            String schedulerType = getSchedulerType();
+
+            // Create core components
+            System.out.println("[Main] Initializing core components...");
+            RequestQueue requestQueue = new RequestQueue();
+            NodeRegistry nodeRegistry = new NodeRegistry();
+            Scheduler scheduler = createScheduler(schedulerType);
+
+            // Register storage nodes
+            System.out.printf("[Main] Registering %d storage nodes:%n", nodeCount);
+            registerStorageNodes(nodeRegistry, nodeCount);
+
+            // Start health checker
+            System.out.println("[Main] Starting Health Checker...");
+            HealthChecker healthChecker = new HealthChecker(nodeRegistry, HEALTH_CHECK_INTERVAL_MS);
+            Thread healthCheckerThread = new Thread(healthChecker);
+            healthCheckerThread.setName("HealthChecker");
+            healthCheckerThread.setDaemon(true);
+            healthCheckerThread.start();
+            System.out.printf("[Main] ✓ Health checker started (interval: %d ms)%n", 
+                HEALTH_CHECK_INTERVAL_MS);
+
+            // Start load balancer worker
+            System.out.println("[Main] Starting Load Balancer Worker...");
+            LoadBalancerWorker worker = new LoadBalancerWorker(
+                requestQueue, nodeRegistry, scheduler);
+            Thread workerThread = new Thread(worker);
+            workerThread.setName("LoadBalancer-Worker");
+            workerThread.setDaemon(true);
+            workerThread.start();
+            System.out.println("[Main] ✓ Load Balancer Worker started");
+
+            // Start HTTP API server
+            System.out.println("[Main] Starting HTTP API Server...");
+            try {
+                LoadBalancerAPIServer apiServer = new LoadBalancerAPIServer(
+                    requestQueue, API_SERVER_PORT);
+                apiServer.start();  // Blocking call - starts HTTP server
+                System.out.printf("[Main] ✓ HTTP API Server listening on port %d%n", 
+                    API_SERVER_PORT);
+            } catch (Exception e) {
+                System.err.printf("[Main] Warning: Could not start API server: %s%n", 
+                    e.getMessage());
+                System.err.println("[Main] Continuing without API server...");
+            }
+
+            // Startup complete
+            System.out.println("========================================");
+            System.out.println("[Main] ✓ Load Balancer fully initialized!");
+            System.out.printf("[Main] Scheduler: %s%n", schedulerType.toUpperCase());
+            System.out.printf("[Main] Storage Nodes: %d%n", nodeCount);
+            System.out.printf("[Main] API Server Port: %d%n", API_SERVER_PORT);
+            System.out.println("========================================");
+
+            // Keep main thread alive
+            Thread.currentThread().join();
+
+        } catch (InterruptedException e) {
+            System.err.println("[Main] Load Balancer interrupted");
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            System.err.printf("[Main] Fatal Error: %s%n", e.getMessage());
             e.printStackTrace();
-            System.err.println("ScalingService disabled (MQTT error).");
+            System.exit(1);
         }
-
-        // Start HTTP API
-        startHttpApi(requestQueue);
-
-        System.out.println("Load Balancer started on port " + HTTP_PORT);
     }
 
-    private static void startHttpApi(RequestQueue queue) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(HTTP_PORT), 0);
-        server.setExecutor(Executors.newCachedThreadPool());
-
-        HttpContext uploadCtx = server.createContext("/api/files/upload");
-        uploadCtx.setHandler(exchange -> handleUpload(exchange, queue));
-
-        HttpContext downloadCtx = server.createContext("/api/files");
-        downloadCtx.setHandler(exchange -> handleDownload(exchange, queue));
-
-        HttpContext healthCtx = server.createContext("/api/health");
-        healthCtx.setHandler(MainLb::handleHealth);
-
-        server.start();
-    }
-
-    // POST /api/files/upload
-    private static void handleUpload(HttpExchange exchange, RequestQueue queue) throws IOException {
-        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-            sendText(exchange, 405, "Method Not Allowed");
-            return;
-        }
-
-        String fileName = exchange.getRequestHeaders().getFirst("X-File-Name");
-        String fileId = exchange.getRequestHeaders().getFirst("X-File-ID");
-        String sizeHeader = exchange.getRequestHeaders().getFirst("X-File-Size");
-
-        if (fileName == null || fileId == null || sizeHeader == null) {
-            sendText(exchange, 400, "Missing file headers");
-            return;
-        }
-
-        long sizeBytes;
-        try {
-            sizeBytes = Long.parseLong(sizeHeader);
-        } catch (NumberFormatException e) {
-            sendText(exchange, 400, "Invalid X-File-Size");
-            return;
-        }
-
-        // Drain request body (content is handed off via internal forwarding in worker)
-        try (InputStream in = exchange.getRequestBody()) {
-            byte[] buffer = new byte[8192];
-            while (in.read(buffer) != -1) {
-                // discard
+    /**
+     * Get node count from environment variable.
+     * 
+     * @return Number of nodes to register (1-5, default: 2)
+     */
+    private static int getNodeCount() {
+        String envValue = System.getenv("NODE_COUNT");
+        if (envValue != null) {
+            try {
+                int count = Integer.parseInt(envValue);
+                if (count >= 1 && count <= NODE_NAMES.length) {
+                    return count;
+                }
+                System.out.printf("[Main] Invalid NODE_COUNT: %d (using default: %d)%n",
+                    count, DEFAULT_NODE_COUNT);
+            } catch (NumberFormatException e) {
+                System.out.printf("[Main] Invalid NODE_COUNT format: %s (using default: %d)%n",
+                    envValue, DEFAULT_NODE_COUNT);
             }
         }
-
-        Request req = new Request(fileId, Request.Type.UPLOAD, sizeBytes, 0);
-        queue.add(req);              // <- matches your RequestQueue API
-        queue.notifyNewRequest();
-
-        String json = "{\"fileId\":\"" + fileId + "\",\"status\":\"queued\"}";
-        sendJson(exchange, 201, json);
+        return DEFAULT_NODE_COUNT;
     }
 
-    // GET /api/files/{fileId}/download
-    private static void handleDownload(HttpExchange exchange, RequestQueue queue) throws IOException {
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            sendText(exchange, 405, "Method Not Allowed");
-            return;
+    /**
+     * Get scheduler type from environment variable.
+     * 
+     * @return Scheduler type (FCFS/SJN/ROUNDROBIN, default: ROUNDROBIN)
+     */
+    private static String getSchedulerType() {
+        String envValue = System.getenv("SCHEDULER_TYPE");
+        if (envValue != null) {
+            String upper = envValue.toUpperCase();
+            if (upper.equals("FCFS") || upper.equals("SJN") || upper.equals("ROUNDROBIN")) {
+                return upper;
+            }
+            System.out.printf("[Main] Invalid SCHEDULER_TYPE: %s (using default: %s)%n",
+                envValue, DEFAULT_SCHEDULER);
         }
-
-        String path = exchange.getRequestURI().getPath(); // /api/files/{fileId}/download
-        String[] parts = path.split("/");
-        if (parts.length < 5 || !"download".equals(parts[4])) {
-            sendText(exchange, 400, "Invalid download path");
-            return;
-        }
-
-        String fileId = parts[3];
-        if (fileId == null || fileId.isBlank()) {
-            sendText(exchange, 400, "Missing fileId");
-            return;
-        }
-
-        Request req = new Request(fileId, Request.Type.DOWNLOAD, 0L, 0);
-        queue.add(req);              // <- matches your RequestQueue API
-        queue.notifyNewRequest();
-
-        sendText(exchange, 200, "Download request queued for fileId=" + fileId);
+        return DEFAULT_SCHEDULER;
     }
 
-    // GET /api/health
-    private static void handleHealth(HttpExchange exchange) throws IOException {
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            sendText(exchange, 405, "Method Not Allowed");
-            return;
-        }
-        sendText(exchange, 200, "OK");
-    }
-
-    private static void sendText(HttpExchange exchange, int status, String body) throws IOException {
-        byte[] bytes = body.getBytes();
-        exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=utf-8");
-        exchange.sendResponseHeaders(status, bytes.length);
-        try (OutputStream out = exchange.getResponseBody()) {
-            out.write(bytes);
+    /**
+     * Create scheduler instance based on type.
+     * 
+     * @param schedulerType Type of scheduler (FCFS/SJN/ROUNDROBIN)
+     * @return Scheduler instance
+     */
+    private static Scheduler createScheduler(String schedulerType) {
+        switch (schedulerType) {
+            case "FCFS":
+                System.out.println("[Main] Scheduler: FCFS (First Come First Serve)");
+                return new FcfsScheduler();
+            
+            case "SJN":
+                System.out.println("[Main] Scheduler: SJN (Shortest Job Next)");
+                return new SjnScheduler();
+            
+            case "ROUNDROBIN":
+                System.out.println("[Main] Scheduler: ROUNDROBIN (Cyclic Distribution)");
+                return new RoundRobinScheduler();
+            
+            default:
+                throw new IllegalArgumentException("Unknown scheduler type: " + schedulerType);
         }
     }
 
-    private static void sendJson(HttpExchange exchange, int status, String json) throws IOException {
-        byte[] bytes = json.getBytes();
-        exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
-        exchange.sendResponseHeaders(status, bytes.length);
-        try (OutputStream out = exchange.getResponseBody()) {
-            out.write(bytes);
+    /**
+     * Register storage nodes in the registry.
+     * 
+     * @param nodeRegistry Registry to register nodes in
+     * @param nodeCount Number of nodes to register
+     */
+    private static void registerStorageNodes(NodeRegistry nodeRegistry, int nodeCount) {
+        for (int i = 0; i < nodeCount && i < NODE_NAMES.length; i++) {
+            StorageNode node = new StorageNode(NODE_NAMES[i], NODE_ADDRESSES[i]);
+            nodeRegistry.registerNode(node);
+            System.out.printf("[Main]   • %s (%s)%n", NODE_NAMES[i], NODE_ADDRESSES[i]);
         }
     }
 }

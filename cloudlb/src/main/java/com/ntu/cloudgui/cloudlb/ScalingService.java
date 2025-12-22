@@ -1,6 +1,5 @@
-package com.ntu.cloudgui.cloudlb.scaling;
+package com.ntu.cloudgui.cloudlb;
 
-import com.ntu.cloudgui.cloudlb.core.RequestQueue;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;

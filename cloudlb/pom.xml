@@ -6,39 +6,64 @@
 
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- Project Coordinates -->
     <groupId>com.ntu.cloudgui</groupId>
     <artifactId>cloudlb</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
+    <name>CloudLB - Cloud Load Balancer</name>
+    <description>Distributed load balancer for file operations across storage nodes</description>
+
+    <!-- Build Properties -->
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Compile against Java 21 -->
         <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
     </properties>
 
+    <!-- Project Dependencies -->
     <dependencies>
-        <!-- Eclipse Paho MQTT client -->
+        <!-- Eclipse Paho MQTT Client -->
         <dependency>
             <groupId>org.eclipse.paho</groupId>
             <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
             <version>1.2.5</version>
         </dependency>
+
+        <!-- Google GSON for JSON Processing -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
+
+        <!-- JUnit for Testing (Optional) -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
+    <!-- Build Configuration -->
     <build>
         <plugins>
-            <!-- Java compiler configuration -->
+            <!-- Java Compiler Plugin - Compile for Java 21 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
                     <release>21</release>
+                    <source>21</source>
+                    <target>21</target>
                 </configuration>
             </plugin>
 
-            <!-- Build executable fat JAR with all dependencies -->
+            <!-- Maven Shade Plugin - Create Fat JAR with all dependencies -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -50,14 +75,31 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <!-- Main class for executable JAR -->
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.ntu.cloudgui.cloudlb.MainLb</mainClass>
                                 </transformer>
                             </transformers>
+                            <!-- Output JAR name -->
+                            <finalName>cloudlb-1.0-SNAPSHOT</finalName>
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+
+            <!-- Maven JAR Plugin - Create standard JAR -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.ntu.cloudgui.cloudlb.MainLb</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
             </plugin>
         </plugins>
     </build>
