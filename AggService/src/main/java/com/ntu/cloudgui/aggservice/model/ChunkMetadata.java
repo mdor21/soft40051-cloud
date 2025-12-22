@@ -1,84 +1,449 @@
 package com.ntu.cloudgui.aggservice.model;
 
+import java.time.LocalDateTime;
+import java.util.Objects;
+
 /**
- * Metadata for a single encrypted chunk of a file.
- *
- * Maps to a table in the remote MySQL database.
+ * ChunkMetadata - File Chunk Information Storage Model
+ * 
+ * Represents metadata about a single chunk of an uploaded file.
+ * Stored in the chunk_metadata database table.
+ * One FileMetadata can have many ChunkMetadata records (one per chunk).
+ * 
+ * Contains:
+ * - Chunk identification (id, fileId, chunkIndex)
+ * - Storage location (serverHost, remotePath)
+ * - Data integrity (crc32Checksum)
+ * - Chunk properties (sizeBytes)
+ * - Timestamps (uploadTimestamp)
+ * 
+ * Database Table:
+ * CREATE TABLE chunk_metadata (
+ *   id INT AUTO_INCREMENT PRIMARY KEY,
+ *   fileId VARCHAR(36) NOT NULL,
+ *   chunkIndex INT NOT NULL,
+ *   serverHost VARCHAR(50) NOT NULL,
+ *   remotePath VARCHAR(255) NOT NULL,
+ *   crc32Checksum BIGINT NOT NULL,
+ *   sizeBytes BIGINT NOT NULL,
+ *   uploadTimestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ *   UNIQUE KEY uk_file_chunk (fileId, chunkIndex),
+ *   FOREIGN KEY (fileId) REFERENCES file_metadata(fileId)
+ * );
+ * 
+ * Example:
+ * <pre>
+ * ChunkMetadata chunk = new ChunkMetadata(
+ *     "550e8400-e29b-41d4-a716-446655440000",
+ *     0,
+ *     "storage-1",
+ *     "/data/chunks/550e8400.../chunk-0",
+ *     123456789L,
+ *     1048576L
+ * );
+ * 
+ * chunkMetadataRepository.save(chunk);
+ * </pre>
  */
 public class ChunkMetadata {
-
-    private Long id;              // optional DB primary key
-    private String fileId;        // link to FileMetadata.fileId
-    private int chunkIndex;       // order of this chunk within the file
-    private String serverHost;    // file server hostname or identifier
-    private String remotePath;    // path or key on the file server
-    private long crc32Checksum;   // CRC32 checksum for integrity
-    private long sizeBytes;       // size of this chunk in bytes
-
-    public Long getId() {
+    
+    // Properties
+    private Integer id;
+    private String fileId;
+    private Integer chunkIndex;
+    private String serverHost;
+    private String remotePath;
+    private Long crc32Checksum;
+    private Long sizeBytes;
+    private LocalDateTime uploadTimestamp;
+    
+    /**
+     * Constructor - Empty (for ORM/reflection)
+     */
+    public ChunkMetadata() {
+    }
+    
+    /**
+     * Constructor - Full (all required fields)
+     * 
+     * Used when creating new chunk metadata after upload.
+     * 
+     * @param fileId Parent file ID (UUID)
+     * @param chunkIndex Zero-based chunk number (0, 1, 2, ...)
+     * @param serverHost Hostname of storage server
+     * @param remotePath Full path on storage server
+     * @param crc32Checksum CRC32 checksum for integrity validation
+     * @param sizeBytes Size of this chunk in bytes
+     */
+    public ChunkMetadata(String fileId, Integer chunkIndex, String serverHost,
+                        String remotePath, Long crc32Checksum, Long sizeBytes) {
+        this.fileId = fileId;
+        this.chunkIndex = chunkIndex;
+        this.serverHost = serverHost;
+        this.remotePath = remotePath;
+        this.crc32Checksum = crc32Checksum;
+        this.sizeBytes = sizeBytes;
+        this.uploadTimestamp = LocalDateTime.now();
+    }
+    
+    /**
+     * Constructor - Full with timestamp
+     * 
+     * Used when retrieving metadata from database.
+     * 
+     * @param fileId Parent file ID (UUID)
+     * @param chunkIndex Zero-based chunk number
+     * @param serverHost Hostname of storage server
+     * @param remotePath Full path on storage server
+     * @param crc32Checksum CRC32 checksum
+     * @param sizeBytes Size of this chunk in bytes
+     * @param uploadTimestamp When chunk was uploaded
+     */
+    public ChunkMetadata(String fileId, Integer chunkIndex, String serverHost,
+                        String remotePath, Long crc32Checksum, Long sizeBytes,
+                        LocalDateTime uploadTimestamp) {
+        this.fileId = fileId;
+        this.chunkIndex = chunkIndex;
+        this.serverHost = serverHost;
+        this.remotePath = remotePath;
+        this.crc32Checksum = crc32Checksum;
+        this.sizeBytes = sizeBytes;
+        this.uploadTimestamp = uploadTimestamp;
+    }
+    
+    /**
+     * Constructor - With ID (from database retrieval)
+     * 
+     * @param id Database primary key
+     * @param fileId Parent file ID
+     * @param chunkIndex Chunk number
+     * @param serverHost Storage server hostname
+     * @param remotePath Path on storage server
+     * @param crc32Checksum CRC32 checksum
+     * @param sizeBytes Chunk size
+     * @param uploadTimestamp Upload timestamp
+     */
+    public ChunkMetadata(Integer id, String fileId, Integer chunkIndex, String serverHost,
+                        String remotePath, Long crc32Checksum, Long sizeBytes,
+                        LocalDateTime uploadTimestamp) {
+        this.id = id;
+        this.fileId = fileId;
+        this.chunkIndex = chunkIndex;
+        this.serverHost = serverHost;
+        this.remotePath = remotePath;
+        this.crc32Checksum = crc32Checksum;
+        this.sizeBytes = sizeBytes;
+        this.uploadTimestamp = uploadTimestamp;
+    }
+    
+    // ==================== GETTERS ====================
+    
+    /**
+     * Get database primary key
+     * 
+     * Generated by database (auto_increment).
+     * 
+     * @return Database ID
+     */
+    public Integer getId() {
         return id;
     }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
+    
+    /**
+     * Get parent file ID
+     * 
+     * @return File UUID
+     */
     public String getFileId() {
         return fileId;
     }
-
-    public void setFileId(String fileId) {
-        this.fileId = fileId;
-    }
-
-    public int getChunkIndex() {
+    
+    /**
+     * Get chunk index (position in file)
+     * 
+     * Zero-based index indicating position in file.
+     * Chunk 0 is first 1MB, Chunk 1 is second 1MB, etc.
+     * 
+     * @return Zero-based chunk number
+     */
+    public Integer getChunkIndex() {
         return chunkIndex;
     }
-
-    public void setChunkIndex(int chunkIndex) {
-        this.chunkIndex = chunkIndex;
-    }
-
+    
+    /**
+     * Get storage server hostname
+     * 
+     * @return Hostname of SFTP server
+     */
     public String getServerHost() {
         return serverHost;
     }
-
-    public void setServerHost(String serverHost) {
-        this.serverHost = serverHost;
-    }
-
+    
+    /**
+     * Get full path on storage server
+     * 
+     * Format: /data/chunks/{fileId}/chunk-{index}
+     * 
+     * @return Remote file path
+     */
     public String getRemotePath() {
         return remotePath;
     }
-
+    
+    /**
+     * Get CRC32 checksum
+     * 
+     * Used to verify data integrity during download.
+     * Calculated from encrypted chunk data.
+     * 
+     * @return CRC32 checksum value
+     */
+    public Long getCrc32Checksum() {
+        return crc32Checksum;
+    }
+    
+    /**
+     * Get chunk size in bytes
+     * 
+     * Typically 1MB (1048576 bytes) except last chunk which may be smaller.
+     * 
+     * @return Size in bytes
+     */
+    public Long getSizeBytes() {
+        return sizeBytes;
+    }
+    
+    /**
+     * Get human-readable chunk size
+     * 
+     * @return Size string (e.g., "1.0 MB")
+     */
+    public String getReadableSize() {
+        if (sizeBytes == null) {
+            return "Unknown";
+        }
+        
+        if (sizeBytes < 1024) {
+            return sizeBytes + " B";
+        }
+        
+        long kb = sizeBytes / 1024;
+        if (kb < 1024) {
+            return kb + " KB";
+        }
+        
+        long mb = kb / 1024;
+        return mb + " MB";
+    }
+    
+    /**
+     * Get upload timestamp
+     * 
+     * @return DateTime when chunk was uploaded
+     */
+    public LocalDateTime getUploadTimestamp() {
+        return uploadTimestamp;
+    }
+    
+    /**
+     * Get age in seconds
+     * 
+     * Useful for cleanup operations.
+     * 
+     * @return Age in seconds since upload
+     */
+    public long getAgeSeconds() {
+        if (uploadTimestamp == null) {
+            return 0;
+        }
+        return java.time.temporal.ChronoUnit.SECONDS.between(
+            uploadTimestamp,
+            LocalDateTime.now()
+        );
+    }
+    
+    /**
+     * Check if this is the last chunk (partial size)
+     * 
+     * All chunks except the last should be exactly 1MB (1048576 bytes).
+     * 
+     * @return true if chunk is smaller than 1MB
+     */
+    public boolean isLastChunk() {
+        return sizeBytes != null && sizeBytes < 1048576L;
+    }
+    
+    // ==================== SETTERS ====================
+    
+    /**
+     * Set database primary key
+     * 
+     * @param id Database ID
+     */
+    public void setId(Integer id) {
+        this.id = id;
+    }
+    
+    /**
+     * Set parent file ID
+     * 
+     * @param fileId File UUID
+     */
+    public void setFileId(String fileId) {
+        this.fileId = fileId;
+    }
+    
+    /**
+     * Set chunk index
+     * 
+     * @param chunkIndex Zero-based position
+     */
+    public void setChunkIndex(Integer chunkIndex) {
+        this.chunkIndex = chunkIndex;
+    }
+    
+    /**
+     * Set storage server hostname
+     * 
+     * @param serverHost Hostname
+     */
+    public void setServerHost(String serverHost) {
+        this.serverHost = serverHost;
+    }
+    
+    /**
+     * Set remote path on storage server
+     * 
+     * @param remotePath Full path
+     */
     public void setRemotePath(String remotePath) {
         this.remotePath = remotePath;
     }
-
-    public long getCrc32Checksum() {
-        return crc32Checksum;
-    }
-
-    public void setCrc32Checksum(long crc32Checksum) {
+    
+    /**
+     * Set CRC32 checksum
+     * 
+     * @param crc32Checksum Checksum value
+     */
+    public void setCrc32Checksum(Long crc32Checksum) {
         this.crc32Checksum = crc32Checksum;
     }
-
-    public long getSizeBytes() {
-        return sizeBytes;
-    }
-
-    public void setSizeBytes(long sizeBytes) {
+    
+    /**
+     * Set chunk size in bytes
+     * 
+     * @param sizeBytes Size
+     */
+    public void setSizeBytes(Long sizeBytes) {
         this.sizeBytes = sizeBytes;
     }
-
+    
+    /**
+     * Set upload timestamp
+     * 
+     * @param uploadTimestamp DateTime
+     */
+    public void setUploadTimestamp(LocalDateTime uploadTimestamp) {
+        this.uploadTimestamp = uploadTimestamp;
+    }
+    
+    // ==================== VALIDATION ====================
+    
+    /**
+     * Validate metadata for completeness
+     * 
+     * Checks that all required fields are populated.
+     * 
+     * @return true if all required fields present
+     */
+    public boolean isValid() {
+        return fileId != null && !fileId.isEmpty() &&
+               chunkIndex != null && chunkIndex >= 0 &&
+               serverHost != null && !serverHost.isEmpty() &&
+               remotePath != null && !remotePath.isEmpty() &&
+               crc32Checksum != null &&
+               sizeBytes != null && sizeBytes > 0;
+    }
+    
+    /**
+     * Get validation error message if invalid
+     * 
+     * @return Error message or null if valid
+     */
+    public String getValidationError() {
+        if (fileId == null || fileId.isEmpty()) {
+            return "fileId is required";
+        }
+        if (chunkIndex == null || chunkIndex < 0) {
+            return "chunkIndex must be >= 0";
+        }
+        if (serverHost == null || serverHost.isEmpty()) {
+            return "serverHost is required";
+        }
+        if (remotePath == null || remotePath.isEmpty()) {
+            return "remotePath is required";
+        }
+        if (crc32Checksum == null) {
+            return "crc32Checksum is required";
+        }
+        if (sizeBytes == null || sizeBytes <= 0) {
+            return "sizeBytes must be positive";
+        }
+        return null;
+    }
+    
+    // ==================== OBJECT METHODS ====================
+    
+    /**
+     * Check equality based on fileId and chunkIndex
+     * 
+     * Two ChunkMetadata objects are equal if they represent the same chunk
+     * (same file and same chunk number).
+     * 
+     * @param obj Object to compare
+     * @return true if equal
+     */
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        ChunkMetadata other = (ChunkMetadata) obj;
+        return Objects.equals(fileId, other.fileId) &&
+               Objects.equals(chunkIndex, other.chunkIndex);
+    }
+    
+    /**
+     * Get hash code based on fileId and chunkIndex
+     * 
+     * @return Hash code
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(fileId, chunkIndex);
+    }
+    
+    /**
+     * Get string representation
+     * 
+     * Format: ChunkMetadata{id=..., fileId=..., chunkIndex=..., size=...}
+     * 
+     * @return String representation
+     */
     @Override
     public String toString() {
         return "ChunkMetadata{" +
-                "fileId='" + fileId + '\'' +
-                ", chunkIndex=" + chunkIndex +
-                ", serverHost='" + serverHost + '\'' +
-                ", remotePath='" + remotePath + '\'' +
-                ", sizeBytes=" + sizeBytes +
-                '}';
+               "id=" + id +
+               ", fileId='" + fileId + '\'' +
+               ", chunkIndex=" + chunkIndex +
+               ", serverHost='" + serverHost + '\'' +
+               ", remotePath='" + remotePath + '\'' +
+               ", crc32Checksum=" + crc32Checksum +
+               ", sizeBytes=" + sizeBytes +
+               ", uploadTimestamp=" + uploadTimestamp +
+               '}';
     }
 }
