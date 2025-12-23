@@ -9,70 +9,122 @@ import java.util.List;
  * Builds concrete Docker CLI commands used by DockerService.
  */
 public class DockerCommandBuilder {
-
+    
+    private static final Logger logger = LogManager.getLogger(DockerCommandBuilder.class);
+    
     /**
-     * Build a "docker run" command for a new file server container.
-     *
-     * Example:
-     *   docker run -d --name file-server-1 -p 9001:8080 fileserver:latest
+     * Build docker run command
      */
-    public static List<String> buildRunCommand(DockerConfig config, int index) {
-        String name = config.getContainerNamePrefix() + index;
-        int hostPort = config.getBasePort() + index;   // e.g. 9000 + index
-
-        List<String> cmd = new ArrayList<>();
-        cmd.add("docker");
-        cmd.add("run");
-        cmd.add("-d");
-        cmd.add("--name");
-        cmd.add(name);
-        cmd.add("-p");
-        cmd.add(hostPort + ":8080");
-        cmd.add(config.getImageName());
-        return cmd;
+    public List<String> buildRunCommand(String containerName, int port, String image) {
+        List<String> command = new ArrayList<>();
+        
+        command.add(DockerConstants.DOCKER_EXECUTABLE);
+        command.add("run");
+        command.add("-it");                          // Interactive + TTY
+        command.add("-d");                           // Detached mode
+        command.add("--name");
+        command.add(containerName);
+        
+        // Volume mount
+        String volumePath = DockerConstants.CONTAINER_VOLUME_BASE + containerName + ":" + 
+                          DockerConstants.CONTAINER_DATA_PATH;
+        command.add("-v");
+        command.add(volumePath);
+        
+        // Port mapping
+        String portMapping = port + ":" + DockerConstants.CONTAINER_PORT_INTERNAL;
+        command.add("-p");
+        command.add(portMapping);
+        
+        // Environment variables
+        command.add("-e");
+        command.add("CONTAINER_ID=" + containerName);
+        command.add("-e");
+        command.add("CONTAINER_PORT=" + port);
+        
+        // Resource limits (optional)
+        command.add("--memory=512m");
+        command.add("--cpus=0.5");
+        
+        // Image
+        command.add(image != null ? image : DockerConstants.IMAGE_NAME);
+        
+        logger.debug("Built docker run command: {}", String.join(" ", command));
+        return command;
     }
-
+    
     /**
-     * Build a "docker stop" command for the given container name.
+     * Build docker stop command
      */
-    public static List<String> buildStopCommand(String name) {
-        List<String> cmd = new ArrayList<>();
-        cmd.add("docker");
-        cmd.add("stop");
-        cmd.add(name);
-        return cmd;
+    public List<String> buildStopCommand(String containerName) {
+        return Arrays.asList(
+            DockerConstants.DOCKER_EXECUTABLE,
+            "stop",
+            "-t", 
+            String.valueOf(DockerConstants.CONTAINER_SHUTDOWN_TIMEOUT),
+            containerName
+        );
     }
-
+    
     /**
-     * Build a "docker rm" command for the given container name.
+     * Build docker remove command
      */
-    public static List<String> buildRemoveCommand(String name) {
-        List<String> cmd = new ArrayList<>();
-        cmd.add("docker");
-        cmd.add("rm");
-        cmd.add(name);
-        return cmd;
+    public List<String> buildRemoveCommand(String containerName) {
+        return Arrays.asList(
+            DockerConstants.DOCKER_EXECUTABLE,
+            "rm",
+            "-f",
+            containerName
+        );
     }
-
+    
     /**
-     * Build a "docker ps" command that lists container names
-     * matching the configured name prefix.
-     *
-     * Example:
-     *   docker ps --format "{{.Names}}" --filter "name=file-server-"
+     * Build docker restart command
      */
-    public static List<String> buildListCommand(DockerConfig config) {
-        List<String> cmd = new ArrayList<>();
-        cmd.add("docker");
-        cmd.add("ps");
-        cmd.add("--format");
-        cmd.add("{{.Names}}");
-        cmd.add("--filter");
-        cmd.add("name=" + config.getContainerNamePrefix());
-        return cmd;
+    public List<String> buildRestartCommand(String containerName) {
+        return Arrays.asList(
+            DockerConstants.DOCKER_EXECUTABLE,
+            "restart",
+            "-t",
+            String.valueOf(DockerConstants.CONTAINER_SHUTDOWN_TIMEOUT),
+            containerName
+        );
     }
-
-    private DockerCommandBuilder() {
-        // utility class; no instances
+    
+    /**
+     * Build docker inspect command
+     */
+    public List<String> buildInspectCommand(String containerName) {
+        return Arrays.asList(
+            DockerConstants.DOCKER_EXECUTABLE,
+            "inspect",
+            containerName
+        );
+    }
+    
+    /**
+     * Build docker logs command
+     */
+    public List<String> buildLogsCommand(String containerName) {
+        return Arrays.asList(
+            DockerConstants.DOCKER_EXECUTABLE,
+            "logs",
+            "--tail", "100",
+            containerName
+        );
+    }
+    
+    /**
+     * Build docker stats command
+     */
+    public List<String> buildStatsCommand(String containerName) {
+        return Arrays.asList(
+            DockerConstants.DOCKER_EXECUTABLE,
+            "stats",
+            "--no-stream",
+            "--format",
+            "{{.CPUPerc}}|{{.MemUsage}}",
+            containerName
+        );
     }
 }
