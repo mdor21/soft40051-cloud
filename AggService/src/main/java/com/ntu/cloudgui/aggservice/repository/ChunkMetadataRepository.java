@@ -1,478 +1,241 @@
 package com.ntu.cloudgui.aggservice.repository;
 
-import com.ntu.cloudgui.aggservice.exception.DatabaseException;
 import com.ntu.cloudgui.aggservice.model.ChunkMetadata;
-import com.zaxxer.hikari.HikariDataSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * ChunkMetadataRepository - Chunk Metadata Data Access Object
- * 
- * Provides CRUD operations for chunk_metadata table.
- * Handles all database interactions for chunk metadata.
- * 
- * Responsibilities:
- * - Save chunk metadata (INSERT)
- * - Retrieve chunk metadata (SELECT)
- * - Delete chunk metadata (DELETE)
- * - Query by file and chunk index
- * - Error handling and logging
- * 
- * Database Table:
- * CREATE TABLE chunk_metadata (
- *   id INT AUTO_INCREMENT PRIMARY KEY,
- *   fileId VARCHAR(36) NOT NULL,
- *   chunkIndex INT NOT NULL,
- *   serverHost VARCHAR(50) NOT NULL,
- *   remotePath VARCHAR(255) NOT NULL,
- *   crc32Checksum BIGINT NOT NULL,
- *   sizeBytes BIGINT NOT NULL,
- *   uploadTimestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
- *   UNIQUE KEY uk_file_chunk (fileId, chunkIndex),
- *   FOREIGN KEY (fileId) REFERENCES file_metadata(fileId) ON DELETE CASCADE
- * );
- * 
- * Example:
- * <pre>
- * HikariDataSource dataSource = dbConfig.getDataSource();
- * ChunkMetadataRepository repository = new ChunkMetadataRepository(dataSource);
- * 
- * ChunkMetadata chunk = new ChunkMetadata(...);
- * repository.save(chunk);
- * 
- * List<ChunkMetadata> chunks = repository.findByFileIdOrderByIndex(fileId);
- * </pre>
+ * ChunkMetadataRepository - Data Access Layer for Chunk Metadata
+ *
+ * Provides database operations for chunk metadata persistence.
+ * Handles CRUD operations and custom queries for chunk retrieval.
+ *
+ * Key Operations:
+ * - Find chunks by fileId
+ * - Find single chunk by fileId and index
+ * - Delete chunks by fileId
+ * - Count chunks for file
+ * - Validate chunk existence
+ *
+ * Database Table: chunk_metadata
+ * Indexes: (fileId, chunkIndex), (fileId), (serverHost)
  */
-public class ChunkMetadataRepository {
-    private static final Logger logger = LoggerFactory.getLogger(ChunkMetadataRepository.class);
-    
-    private final HikariDataSource dataSource;
-    
-    // SQL Queries
-    private static final String INSERT_QUERY =
-        "INSERT INTO chunk_metadata " +
-        "(fileId, chunkIndex, serverHost, remotePath, crc32Checksum, sizeBytes) " +
-        "VALUES (?, ?, ?, ?, ?, ?)";
-    
-    private static final String SELECT_BY_FILE_QUERY =
-        "SELECT id, fileId, chunkIndex, serverHost, remotePath, crc32Checksum, sizeBytes, uploadTimestamp " +
-        "FROM chunk_metadata WHERE fileId = ? ORDER BY chunkIndex ASC";
-    
-    private static final String SELECT_BY_FILE_AND_INDEX_QUERY =
-        "SELECT id, fileId, chunkIndex, serverHost, remotePath, crc32Checksum, sizeBytes, uploadTimestamp " +
-        "FROM chunk_metadata WHERE fileId = ? AND chunkIndex = ? LIMIT 1";
-    
-    private static final String DELETE_BY_FILE_QUERY =
-        "DELETE FROM chunk_metadata WHERE fileId = ?";
-    
-    private static final String DELETE_BY_FILE_AND_INDEX_QUERY =
-        "DELETE FROM chunk_metadata WHERE fileId = ? AND chunkIndex = ?";
-    
-    private static final String COUNT_BY_FILE_QUERY =
-        "SELECT COUNT(*) as count FROM chunk_metadata WHERE fileId = ?";
-    
+@Repository
+public interface ChunkMetadataRepository extends JpaRepository<ChunkMetadata, Long> {
+
     /**
-     * Constructor - Initialize repository with data source
-     * 
-     * @param dataSource HikariCP data source (connection pool)
+     * Find all chunks for a file, ordered by chunk index.
+     *
+     * Used during file reconstruction to retrieve chunks in correct order.
+     *
+     * Example:
+     * <pre>
+     * List<ChunkMetadata> chunks = repository
+     *     .findByFileIdOrderByChunkIndex("file-uuid-123");
+     * // Returns: [chunk 0, chunk 1, chunk 2, ...]
+     * </pre>
+     *
+     * @param fileId Unique file identifier (UUID)
+     * @return List of chunks ordered by index (0, 1, 2, ...)
+     *         Empty list if no chunks found
      */
-    public ChunkMetadataRepository(HikariDataSource dataSource) {
-        this.dataSource = dataSource;
-    }
-    
+    List<ChunkMetadata> findByFileIdOrderByChunkIndex(String fileId);
+
     /**
-     * Save chunk metadata to database
-     * 
-     * Inserts a new chunk metadata record.
-     * Validates metadata before saving.
-     * 
-     * @param metadata ChunkMetadata object to save
-     * @throws DatabaseException if save fails
+     * Find a single chunk by fileId and chunk index.
+     *
+     * Used to retrieve specific chunk metadata.
+     *
+     * Example:
+     * <pre>
+     * Optional<ChunkMetadata> chunk = repository
+     *     .findByFileIdAndChunkIndex("file-uuid-123", 0);
+     * if (chunk.isPresent()) {
+     *     ChunkMetadata metadata = chunk.get();
+     *     // Use metadata to fetch chunk from storage
+     * }
+     * </pre>
+     *
+     * @param fileId Unique file identifier (UUID)
+     * @param chunkIndex Index of chunk to retrieve (0-based)
+     * @return Optional containing chunk metadata if found
      */
-    public void save(ChunkMetadata metadata) throws DatabaseException {
-        // Validate metadata
-        if (!metadata.isValid()) {
-            throw new DatabaseException(
-                DatabaseException.ErrorType.CONSTRAINT_VIOLATION,
-                "chunk_metadata"
-            );
-        }
-        
-        logger.debug("Saving chunk metadata: {}[{}]", 
-                    metadata.getFileId(), metadata.getChunkIndex());
-        
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        
-        try {
-            conn = dataSource.getConnection();
-            stmt = conn.prepareStatement(INSERT_QUERY);
-            
-            // Set parameters
-            stmt.setString(1, metadata.getFileId());
-            stmt.setInt(2, metadata.getChunkIndex());
-            stmt.setString(3, metadata.getServerHost());
-            stmt.setString(4, metadata.getRemotePath());
-            stmt.setLong(5, metadata.getCrc32Checksum());
-            stmt.setLong(6, metadata.getSizeBytes());
-            
-            // Execute insert
-            int rowsInserted = stmt.executeUpdate();
-            
-            if (rowsInserted > 0) {
-                logger.info("✓ Chunk metadata saved: {}[{}]", 
-                           metadata.getFileId(), metadata.getChunkIndex());
-            } else {
-                throw new DatabaseException(
-                    DatabaseException.ErrorType.UPDATE_FAILED,
-                    "chunk_metadata"
-                );
-            }
-            
-        } catch (SQLException e) {
-            logger.error("✗ Failed to save chunk metadata: {}", e.getMessage(), e);
-            
-            // Handle specific SQL errors
-            if (e.getErrorCode() == 1062) {
-                // Duplicate key error
-                throw new DatabaseException(
-                    DatabaseException.ErrorType.DUPLICATE_KEY,
-                    "chunk_metadata",
-                    e
-                );
-            }
-            
-            throw new DatabaseException(
-                DatabaseException.ErrorType.QUERY_FAILED,
-                "chunk_metadata",
-                e
-            );
-            
-        } finally {
-            closeResources(stmt, conn);
-        }
-    }
-    
+    Optional<ChunkMetadata> findByFileIdAndChunkIndex(String fileId, Integer chunkIndex);
+
     /**
-     * Find all chunks for a file, ordered by index
-     * 
-     * Retrieves all chunk metadata for a given file ID.
-     * Results are ordered by chunk index (0, 1, 2, ...).
-     * 
-     * @param fileId File identifier (UUID)
-     * @return List of ChunkMetadata ordered by index (empty if none found)
-     * @throws DatabaseException if query fails
+     * Find all chunks stored on a specific server.
+     *
+     * Used for server-side operations, backups, or cleanup.
+     *
+     * Example:
+     * <pre>
+     * List<ChunkMetadata> serverChunks = repository
+     *     .findByServerHost("storage-server-1.cloud.local");
+     * </pre>
+     *
+     * @param serverHost Storage server hostname or IP address
+     * @return List of chunks on the specified server
+     *         Empty list if no chunks found
      */
-    public List<ChunkMetadata> findByFileIdOrderByIndex(String fileId) 
-            throws DatabaseException {
-        logger.debug("Finding chunks for file: {}", fileId);
-        
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-        
-        try {
-            conn = dataSource.getConnection();
-            stmt = conn.prepareStatement(SELECT_BY_FILE_QUERY);
-            
-            // Set parameter
-            stmt.setString(1, fileId);
-            
-            // Execute query
-            rs = stmt.executeQuery();
-            
-            // Build list
-            List<ChunkMetadata> chunks = new ArrayList<>();
-            while (rs.next()) {
-                chunks.add(mapResultSetToChunkMetadata(rs));
-            }
-            
-            logger.debug("✓ Found {} chunks for file: {}", chunks.size(), fileId);
-            return chunks;
-            
-        } catch (SQLException e) {
-            logger.error("✗ Failed to find chunks: {}", e.getMessage(), e);
-            throw new DatabaseException(
-                DatabaseException.ErrorType.QUERY_FAILED,
-                "chunk_metadata",
-                e
-            );
-            
-        } finally {
-            closeResources(rs, stmt, conn);
-        }
-    }
-    
+    List<ChunkMetadata> findByServerHost(String serverHost);
+
     /**
-     * Find specific chunk by file ID and chunk index
-     * 
-     * Retrieves a single chunk by file ID and chunk number.
-     * Returns null if not found.
-     * 
-     * @param fileId File identifier (UUID)
-     * @param chunkIndex Zero-based chunk number
-     * @return ChunkMetadata object or null if not found
-     * @throws DatabaseException if query fails
+     * Count total chunks for a file.
+     *
+     * Used to verify chunk count matches expected value.
+     *
+     * Example:
+     * <pre>
+     * long count = repository.countByFileId("file-uuid-123");
+     * if (count != expectedTotalChunks) {
+     *     throw new IncompleteFileException();
+     * }
+     * </pre>
+     *
+     * @param fileId Unique file identifier (UUID)
+     * @return Number of chunks for this file
      */
-    public ChunkMetadata findByFileIdAndIndex(String fileId, Integer chunkIndex) 
-            throws DatabaseException {
-        logger.debug("Finding chunk: {}[{}]", fileId, chunkIndex);
-        
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-        
-        try {
-            conn = dataSource.getConnection();
-            stmt = conn.prepareStatement(SELECT_BY_FILE_AND_INDEX_QUERY);
-            
-            // Set parameters
-            stmt.setString(1, fileId);
-            stmt.setInt(2, chunkIndex);
-            
-            // Execute query
-            rs = stmt.executeQuery();
-            
-            // Check if result found
-            if (rs.next()) {
-                ChunkMetadata chunk = mapResultSetToChunkMetadata(rs);
-                logger.debug("✓ Chunk found: {}[{}]", fileId, chunkIndex);
-                return chunk;
-            }
-            
-            logger.debug("Chunk not found: {}[{}]", fileId, chunkIndex);
-            return null;
-            
-        } catch (SQLException e) {
-            logger.error("✗ Failed to find chunk: {}", e.getMessage(), e);
-            throw new DatabaseException(
-                DatabaseException.ErrorType.QUERY_FAILED,
-                "chunk_metadata",
-                e
-            );
-            
-        } finally {
-            closeResources(rs, stmt, conn);
-        }
-    }
-    
+    long countByFileId(String fileId);
+
     /**
-     * Count chunks for a file
-     * 
-     * Returns the total number of chunks stored for a file.
-     * Useful for validation and integrity checks.
-     * 
-     * @param fileId File identifier (UUID)
-     * @return Number of chunks (0 if none)
-     * @throws DatabaseException if query fails
+     * Check if a chunk exists.
+     *
+     * Used before attempting to retrieve a chunk.
+     *
+     * Example:
+     * <pre>
+     * boolean exists = repository
+     *     .existsByFileIdAndChunkIndex("file-uuid-123", 0);
+     * </pre>
+     *
+     * @param fileId Unique file identifier (UUID)
+     * @param chunkIndex Index of chunk to check (0-based)
+     * @return true if chunk exists, false otherwise
      */
-    public int countByFileId(String fileId) throws DatabaseException {
-        logger.debug("Counting chunks for file: {}", fileId);
-        
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-        
-        try {
-            conn = dataSource.getConnection();
-            stmt = conn.prepareStatement(COUNT_BY_FILE_QUERY);
-            
-            // Set parameter
-            stmt.setString(1, fileId);
-            
-            // Execute query
-            rs = stmt.executeQuery();
-            
-            int count = 0;
-            if (rs.next()) {
-                count = rs.getInt("count");
-            }
-            
-            logger.debug("✓ File has {} chunks", count);
-            return count;
-            
-        } catch (SQLException e) {
-            logger.error("✗ Failed to count chunks: {}", e.getMessage(), e);
-            throw new DatabaseException(
-                DatabaseException.ErrorType.QUERY_FAILED,
-                "chunk_metadata",
-                e
-            );
-            
-        } finally {
-            closeResources(rs, stmt, conn);
-        }
-    }
-    
+    boolean existsByFileIdAndChunkIndex(String fileId, Integer chunkIndex);
+
     /**
-     * Delete all chunks for a file
-     * 
-     * Deletes all chunk metadata records for the given file.
-     * Also deletes physical chunks from storage (manual cleanup required).
-     * 
-     * @param fileId File identifier (UUID)
-     * @throws DatabaseException if delete fails
+     * Delete all chunks for a file.
+     *
+     * Called during file deletion to clean up metadata.
+     * Physical chunks on storage servers must be deleted separately.
+     *
+     * Example:
+     * <pre>
+     * repository.deleteByFileId("file-uuid-123");
+     * // Metadata deleted, but SFTP cleanup needed separately
+     * </pre>
+     *
+     * @param fileId Unique file identifier (UUID)
      */
-    public void deleteByFileId(String fileId) throws DatabaseException {
-        logger.debug("Deleting all chunks for file: {}", fileId);
-        
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        
-        try {
-            conn = dataSource.getConnection();
-            stmt = conn.prepareStatement(DELETE_BY_FILE_QUERY);
-            
-            // Set parameter
-            stmt.setString(1, fileId);
-            
-            // Execute delete
-            int rowsDeleted = stmt.executeUpdate();
-            
-            logger.info("✓ Deleted {} chunk records for file: {}", rowsDeleted, fileId);
-            
-        } catch (SQLException e) {
-            logger.error("✗ Failed to delete chunks: {}", e.getMessage(), e);
-            throw new DatabaseException(
-                DatabaseException.ErrorType.DELETE_FAILED,
-                "chunk_metadata",
-                e
-            );
-            
-        } finally {
-            closeResources(stmt, conn);
-        }
-    }
-    
+    void deleteByFileId(String fileId);
+
     /**
-     * Delete specific chunk
-     * 
-     * Deletes a single chunk metadata record.
-     * Also deletes physical chunk from storage (manual cleanup required).
-     * 
-     * @param fileId File identifier (UUID)
-     * @param chunkIndex Zero-based chunk number
-     * @throws DatabaseException if delete fails
+     * Find chunks by file and validate total count.
+     *
+     * Custom query with validation.
+     * Returns chunks ordered by index for reconstruction.
+     *
+     * @param fileId Unique file identifier (UUID)
+     * @param expectedCount Expected number of chunks
+     * @return List of chunks if count matches, empty list otherwise
      */
-    public void deleteByFileIdAndIndex(String fileId, Integer chunkIndex) 
-            throws DatabaseException {
-        logger.debug("Deleting chunk: {}[{}]", fileId, chunkIndex);
-        
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        
-        try {
-            conn = dataSource.getConnection();
-            stmt = conn.prepareStatement(DELETE_BY_FILE_AND_INDEX_QUERY);
-            
-            // Set parameters
-            stmt.setString(1, fileId);
-            stmt.setInt(2, chunkIndex);
-            
-            // Execute delete
-            int rowsDeleted = stmt.executeUpdate();
-            
-            if (rowsDeleted > 0) {
-                logger.info("✓ Chunk deleted: {}[{}]", fileId, chunkIndex);
-            } else {
-                logger.warn("Chunk not found: {}[{}]", fileId, chunkIndex);
-            }
-            
-        } catch (SQLException e) {
-            logger.error("✗ Failed to delete chunk: {}", e.getMessage(), e);
-            throw new DatabaseException(
-                DatabaseException.ErrorType.DELETE_FAILED,
-                "chunk_metadata",
-                e
-            );
-            
-        } finally {
-            closeResources(stmt, conn);
-        }
-    }
-    
+    @Query("SELECT c FROM ChunkMetadata c WHERE c.fileId = :fileId " +
+           "ORDER BY c.chunkIndex ASC")
+    List<ChunkMetadata> findChunksForFile(@Param("fileId") String fileId);
+
     /**
-     * Map ResultSet row to ChunkMetadata object
-     * 
-     * Converts database row to domain object.
-     * 
-     * @param rs ResultSet positioned at data row
-     * @return ChunkMetadata object
-     * @throws SQLException if column access fails
+     * Find all chunks on a server, paginated.
+     *
+     * Used for large-scale server operations with memory efficiency.
+     *
+     * @param serverHost Storage server hostname or IP address
+     * @param offset Starting position (0-based)
+     * @param limit Maximum number of results
+     * @return List of chunks from specified server (paginated)
      */
-    private ChunkMetadata mapResultSetToChunkMetadata(ResultSet rs) throws SQLException {
-        LocalDateTime uploadTimestamp = null;
-        Timestamp dbTimestamp = rs.getTimestamp("uploadTimestamp");
-        if (dbTimestamp != null) {
-            uploadTimestamp = dbTimestamp.toLocalDateTime();
-        }
-        
-        return new ChunkMetadata(
-            rs.getInt("id"),
-            rs.getString("fileId"),
-            rs.getInt("chunkIndex"),
-            rs.getString("serverHost"),
-            rs.getString("remotePath"),
-            rs.getLong("crc32Checksum"),
-            rs.getLong("sizeBytes"),
-            uploadTimestamp
-        );
-    }
-    
+    @Query(value = "SELECT * FROM chunk_metadata WHERE serverHost = :serverHost " +
+                   "LIMIT :limit OFFSET :offset",
+           nativeQuery = true)
+    List<ChunkMetadata> findByServerHostPaginated(
+            @Param("serverHost") String serverHost,
+            @Param("offset") long offset,
+            @Param("limit") int limit
+    );
+
     /**
-     * Close database resources
-     * 
-     * Safely closes ResultSet, PreparedStatement, and Connection.
-     * 
-     * @param rs ResultSet to close (may be null)
-     * @param stmt PreparedStatement to close (may be null)
-     * @param conn Connection to close (returns to pool)
+     * Get all unique server hosts storing chunks.
+     *
+     * Used for topology discovery and health checks.
+     *
+     * Example:
+     * <pre>
+     * List<String> servers = repository.findAllServerHosts();
+     * // Returns: ["storage-1", "storage-2", "storage-3"]
+     * </pre>
+     *
+     * @return List of unique server hostnames
      */
-    private void closeResources(ResultSet rs, PreparedStatement stmt, Connection conn) {
-        try {
-            if (rs != null) {
-                rs.close();
-            }
-        } catch (SQLException e) {
-            logger.debug("Error closing ResultSet", e);
-        }
-        
-        closeResources(stmt, conn);
-    }
-    
+    @Query("SELECT DISTINCT c.serverHost FROM ChunkMetadata c")
+    List<String> findAllServerHosts();
+
     /**
-     * Close database resources
-     * 
-     * Safely closes PreparedStatement and Connection.
-     * 
-     * @param stmt PreparedStatement to close (may be null)
-     * @param conn Connection to close (returns to pool)
+     * Get storage size used by all chunks.
+     *
+     * Calculates total encrypted storage used.
+     * Useful for capacity planning.
+     *
+     * Example:
+     * <pre>
+     * long totalSize = repository.getTotalStorageSize();
+     * System.out.println("Total storage: " + (totalSize / 1024 / 1024 / 1024) + " GB");
+     * </pre>
+     *
+     * @return Sum of all encrypted chunk sizes in bytes
      */
-    private void closeResources(PreparedStatement stmt, Connection conn) {
-        try {
-            if (stmt != null) {
-                stmt.close();
-            }
-        } catch (SQLException e) {
-            logger.debug("Error closing PreparedStatement", e);
-        }
-        
-        try {
-            if (conn != null) {
-                conn.close();  // Returns connection to pool
-            }
-        } catch (SQLException e) {
-            logger.debug("Error closing Connection", e);
-        }
-    }
+    @Query("SELECT COALESCE(SUM(c.encryptedSize), 0) FROM ChunkMetadata c")
+    long getTotalStorageSize();
+
+    /**
+     * Get storage size used by chunks on specific server.
+     *
+     * Used for per-server storage accounting.
+     *
+     * @param serverHost Storage server hostname or IP address
+     * @return Sum of encrypted chunk sizes on this server in bytes
+     */
+    @Query("SELECT COALESCE(SUM(c.encryptedSize), 0) FROM ChunkMetadata c " +
+           "WHERE c.serverHost = :serverHost")
+    long getStorageSizeByServer(@Param("serverHost") String serverHost);
+
+    /**
+     * Get storage size used by a specific file.
+     *
+     * Includes overhead from encryption.
+     *
+     * @param fileId Unique file identifier (UUID)
+     * @return Sum of encrypted chunk sizes for this file in bytes
+     */
+    @Query("SELECT COALESCE(SUM(c.encryptedSize), 0) FROM ChunkMetadata c " +
+           "WHERE c.fileId = :fileId")
+    long getStorageSizeByFile(@Param("fileId") String fileId);
+
+    /**
+     * Verify data consistency for a file.
+     *
+     * Checks that all expected chunks exist and CRC values are set.
+     *
+     * @param fileId Unique file identifier (UUID)
+     * @param expectedChunkCount Expected total number of chunks
+     * @return true if all chunks present and valid, false otherwise
+     */
+    @Query("SELECT COUNT(c) = :expectedCount FROM ChunkMetadata c " +
+           "WHERE c.fileId = :fileId AND c.crc32 IS NOT NULL")
+    boolean isFileComplete(@Param("fileId") String fileId,
+                          @Param("expectedCount") int expectedChunkCount);
 }
