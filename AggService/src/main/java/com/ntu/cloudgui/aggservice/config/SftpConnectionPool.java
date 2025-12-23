@@ -1,56 +1,88 @@
 package com.ntu.cloudgui.aggservice.config;
 
+import com.jcraft.jsch.Channel;
+import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
+/**
+ * SftpConnectionPool - Simple SFTP connection pool per host.
+ */
 @Component
 public class SftpConnectionPool {
+
+    private static final Logger logger = LoggerFactory.getLogger(SftpConnectionPool.class);
+
     private final SftpConfig sftpConfig;
-    private final ConcurrentLinkedQueue<Session> pool = new ConcurrentLinkedQueue<>();
-    private static final int MAX_POOL_SIZE = 10;
+    private final Map<String, SftpConnection> connections = new ConcurrentHashMap<>();
 
     public SftpConnectionPool(SftpConfig sftpConfig) {
         this.sftpConfig = sftpConfig;
+        logger.info("SftpConnectionPool initialized");
     }
 
-    public Session getConnection() throws JSchException {
-        Session session = pool.poll();
-        if (session != null && session.isConnected()) {
-            return session;
+    public synchronized SftpConnection getConnection(String serverHost) throws Exception {
+        SftpConnection existing = connections.get(serverHost);
+        if (existing != null && existing.isConnected()) {
+            existing.updateLastUsed();
+            logger.debug("Reusing existing SFTP connection for host {}", serverHost);
+            return existing;
         }
-        return createNewSession();
+
+        logger.info("Creating new SFTP connection for host {}", serverHost);
+        SftpConnection newConn = createNewConnection(serverHost);
+        connections.put(serverHost, newConn);
+        return newConn;
     }
 
-    private Session createNewSession() throws JSchException {
-        JSch jsch = new JSch();
-        Session session = jsch.getSession(
-            sftpConfig.getUsername(),
-            sftpConfig.getHost(),
-            sftpConfig.getPort()
-        );
-        session.setPassword(sftpConfig.getPassword());
-        session.setConfig("StrictHostKeyChecking", "no");
-        session.setServerAliveInterval(60000);
-        session.connect(sftpConfig.getConnectionTimeout());
-        return session;
-    }
-
-    public void returnConnection(Session session) {
-        if (pool.size() < MAX_POOL_SIZE && session.isConnected()) {
-            pool.offer(session);
+    public synchronized void releaseConnection(String serverHost, SftpConnection connection) {
+        if (connection == null) {
+            return;
+        }
+        if (!connection.isConnected()) {
+            logger.debug("Dropping closed SFTP connection for host {}", serverHost);
+            connections.remove(serverHost);
         } else {
-            session.disconnect();
+            connection.updateLastUsed();
         }
     }
 
-    public void shutdown() {
-        pool.forEach(Session::disconnect);
-        pool.clear();
+    public synchronized void shutdown() {
+        logger.info("Shutting down SftpConnectionPool...");
+        for (Map.Entry<String, SftpConnection> entry : connections.entrySet()) {
+            try {
+                entry.getValue().disconnect();
+            } catch (Exception e) {
+                logger.warn("Error closing SFTP connection for host {}: {}",
+                        entry.getKey(), e.getMessage());
+            }
+        }
+        connections.clear();
+        logger.info("SftpConnectionPool shutdown complete");
+    }
+
+    private SftpConnection createNewConnection(String serverHost) throws Exception {
+        String username = sftpConfig.getUsername();
+        int port = sftpConfig.getPort();
+        String password = sftpConfig.getPassword();
+        int timeout = sftpConfig.getConnectionTimeout();
+
+        JSch jsch = new JSch();
+        Session session = jsch.getSession(username, serverHost, port);
+        session.setPassword(password);
+        session.setConfig("StrictHostKeyChecking", "no");
+        session.connect(timeout);
+
+        Channel channel = session.openChannel("sftp");
+        channel.connect(timeout);
+        ChannelSftp sftpChannel = (ChannelSftp) channel;
+
+        return new SftpConnection(session, sftpChannel, serverHost);
     }
 }
