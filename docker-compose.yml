@@ -9,6 +9,12 @@ services:
     ports:
       - "3390:3389"
       - "2022:22"
+    environment:
+      DB_HOST: lamp-server
+      DB_PORT: 3306
+      DB_NAME: cloud_gui
+      DB_USER: admin
+      DB_PASS: changeme
     networks:
       - soft40051_network
 
