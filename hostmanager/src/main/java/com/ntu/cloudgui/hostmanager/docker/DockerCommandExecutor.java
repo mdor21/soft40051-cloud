@@ -1,8 +1,13 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.ntu.cloudgui.hostmanager.docker;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Executes Docker commands via ProcessBuilder
@@ -12,16 +17,22 @@ public class DockerCommandExecutor {
     
     private static final Logger logger = LogManager.getLogger(DockerCommandExecutor.class);
     private static final int COMMAND_TIMEOUT = 30;  // seconds
-    
+
     /**
      * Run a new Docker container
      */
     public ProcessResult runContainer(String containerName, int port, String image) {
         try {
             logger.info("Starting container: {} on port {}", containerName, port);
-            
+
             List<String> command = new DockerCommandBuilder()
-                .buildRunCommand(containerName, port, image);
+                .withCommand("run")
+                .withDetachedMode()
+                .withName(containerName)
+                .withNetwork("soft40051_network")
+                .withPortMapping(port, 22)
+                .withImage(image)
+                .build();
             
             ProcessResult result = executeWithTimeout(command, COMMAND_TIMEOUT);
             
@@ -47,7 +58,9 @@ public class DockerCommandExecutor {
             logger.info("Stopping container: {}", containerName);
             
             List<String> command = new DockerCommandBuilder()
-                .buildStopCommand(containerName);
+                .withCommand("stop")
+                .withContainerName(containerName)
+                .build();
             
             ProcessResult result = executeWithTimeout(command, COMMAND_TIMEOUT);
             
@@ -73,7 +86,9 @@ public class DockerCommandExecutor {
     public ProcessResult removeContainer(String containerName) {
         try {
             List<String> command = new DockerCommandBuilder()
-                .buildRemoveCommand(containerName);
+                .withCommand("rm")
+                .withContainerName(containerName)
+                .build();
             
             ProcessResult result = executeWithTimeout(command, 10);
             
@@ -97,7 +112,9 @@ public class DockerCommandExecutor {
             logger.info("Restarting container: {}", containerName);
             
             List<String> command = new DockerCommandBuilder()
-                .buildRestartCommand(containerName);
+                .withCommand("restart")
+                .withContainerName(containerName)
+                .build();
             
             ProcessResult result = executeWithTimeout(command, COMMAND_TIMEOUT);
             
@@ -119,7 +136,9 @@ public class DockerCommandExecutor {
     public ProcessResult inspectContainer(String containerName) {
         try {
             List<String> command = new DockerCommandBuilder()
-                .buildInspectCommand(containerName);
+                .withCommand("inspect")
+                .withContainerName(containerName)
+                .build();
             
             return executeWithTimeout(command, 10);
             
@@ -191,8 +210,7 @@ public class DockerCommandExecutor {
             
             // Capture output
             StringBuilder output = new StringBuilder();
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(process.getInputStream()))) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     output.append(line).append("\n");
