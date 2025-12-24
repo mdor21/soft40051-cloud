@@ -2,25 +2,28 @@ package com.ntu.cloudgui.cloudlb.core;
 
 import com.ntu.cloudgui.cloudlb.Request;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * SjnScheduler - Shortest Job Next Scheduler
- * 
- * Selects storage nodes based on job size/load.
- * 
- * Current implementation: Simple round-robin selection from healthy nodes.
- * (In production, this would track per-node load and select least-loaded node)
- * 
- * Thread-safe: synchronized selectNode() method for safe index updates.
+ *
+ * This scheduler works in conjunction with the RequestQueue, which is responsible
+ * for prioritizing requests based on job size (smaller jobs first) and age.
+ *
+ * This scheduler's role is simply to select the next available healthy node
+ * in a round-robin fashion. The "Shortest-Job-Next" logic is enforced by the
+ * queue, which provides the highest-priority (i.e., smallest) job to the worker.
+ *
+ * Thread-safe: uses AtomicInteger for safe round-robin index updates.
  */
 public class SjnScheduler implements Scheduler {
 
     private static final String LOG_PREFIX = "[SJN]";
-    private int currentIndex = 0;  // For round-robin behavior
+    private final AtomicInteger currentIndex = new AtomicInteger(0);
 
     /**
      * Get scheduler name.
-     * 
+     *
      * @return Scheduler name
      */
     @Override
@@ -29,32 +32,32 @@ public class SjnScheduler implements Scheduler {
     }
 
     /**
-     * Select a node using SJN strategy.
-     * 
-     * Current: Round-robin selection (picks nodes in sequence)
-     * Future: Could track node load and select least-loaded
-     * 
+     * Select a node using a round-robin strategy.
+     *
+     * The RequestQueue has already provided the "shortest job," so this scheduler's
+     * task is to distribute these high-priority jobs across the available nodes.
+     *
      * @param healthyNodes List of healthy storage nodes
-     * @param request Request to be scheduled
-     * @return Selected StorageNode, or null if no healthy nodes
+     * @param request The request to be scheduled (already prioritized by the queue)
+     * @return Selected StorageNode, or null if no healthy nodes are available
      */
     @Override
-    public synchronized StorageNode selectNode(List<StorageNode> healthyNodes, Request request) {
+    public StorageNode selectNode(List<StorageNode> healthyNodes, Request request) {
         if (healthyNodes == null || healthyNodes.isEmpty()) {
             System.out.printf("%s No healthy nodes available%n", LOG_PREFIX);
             return null;
         }
 
-        // Simple round-robin selection
-        // (Replace with load-based selection when load tracking is implemented)
-        StorageNode selectedNode = healthyNodes.get(currentIndex % healthyNodes.size());
-        currentIndex = (currentIndex + 1) % healthyNodes.size();
-        
-        System.out.printf("%s Selected: %s (%s)%n",
+        // Use thread-safe round-robin to select the next healthy node.
+        int index = Math.abs(currentIndex.getAndIncrement()) % healthyNodes.size();
+        StorageNode selectedNode = healthyNodes.get(index);
+
+        System.out.printf("%s Selected node %s for shortest job %s (%.2f MB)%n",
             LOG_PREFIX,
             selectedNode.getName(),
-            selectedNode.getAddress());
-        
+            request.getId(),
+            request.getSizeMB());
+
         return selectedNode;
     }
 }
