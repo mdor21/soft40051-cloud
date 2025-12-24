@@ -6,12 +6,12 @@ import java.sql.SQLException;
 
 public class MySqlConnectionManager {
 
-    // MySQL container name reachable on the shared Docker network
-    private static final String HOST = "lamp-server";  // Docker service/container name
-    private static final int    PORT = 3306;
-    private static final String DB   = "cloud_gui";    // your schema name
-    private static final String USER = "admin";
-    private static final String PASS = "om2YVGGmQAnE";
+    // Read database connection details from environment variables
+    private static final String HOST = System.getenv().getOrDefault("DB_HOST", "lamp-server");
+    private static final int    PORT = Integer.parseInt(System.getenv().getOrDefault("DB_PORT", "3306"));
+    private static final String DB   = System.getenv().getOrDefault("DB_NAME", "cloud_gui");
+    private static final String USER = System.getenv().getOrDefault("DB_USER", "admin");
+    private static final String PASS = System.getenv().getOrDefault("DB_PASS", "changeme");
 
     private static final String URL = String.format(
             "jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC",
