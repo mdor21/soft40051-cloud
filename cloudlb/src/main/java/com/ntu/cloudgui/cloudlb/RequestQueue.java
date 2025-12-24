@@ -1,8 +1,7 @@
 package com.ntu.cloudgui.cloudlb;
 
 import com.ntu.cloudgui.cloudlb.Request;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.PriorityQueue;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.Condition;
@@ -35,10 +34,7 @@ import java.util.concurrent.locks.Condition;
  */
 public class RequestQueue {
 
-    private static final int AGING_THRESHOLD_MS = 5000;  // 5 seconds
-    private static final double AGING_PRIORITY_BOOST = 1.5; // 50% boost per 5s
-    
-    private final List<Request> queue;
+    private final PriorityQueue<Request> queue;
     private final Lock lock;
     private final Condition notEmpty;
 
@@ -49,7 +45,7 @@ public class RequestQueue {
      * thread wait/notify mechanism.
      */
     public RequestQueue() {
-        this.queue = new LinkedList<>();
+        this.queue = new PriorityQueue<>();
         this.lock = new ReentrantLock();
         this.notEmpty = lock.newCondition();
     }
@@ -69,9 +65,7 @@ public class RequestQueue {
     public void add(Request request) {
         lock.lock();
         try {
-            queue.add(request);
-            // Queue is re-sorted during retrieval (in get() method)
-            // This allows priority calculations based on current time
+            queue.offer(request); // Use offer for PriorityQueue
             
             System.out.printf("[Queue] Added %s request (%.2f MB) - Queue size: %d%n",
                 request.getType().getDisplayName(),
@@ -85,10 +79,9 @@ public class RequestQueue {
     /**
      * Get the next request from the queue.
      * 
-     * Retrieves request with highest priority based on:
-     * 1. File size (smaller = higher priority for SJN)
-     * 2. Age (older requests get priority boost)
-     * 3. Arrival order (FIFO as tiebreaker)
+     * Retrieves the request with the highest priority. The priority is
+     * determined by the compareTo method in the Request class (which
+     * implements SJN + aging).
      * 
      * Blocking operation: Waits if queue is empty.
      * 
@@ -103,13 +96,13 @@ public class RequestQueue {
                 notEmpty.await();
             }
 
-            // Get highest priority request (considering SJN + aging)
-            Request request = getHighestPriorityRequest();
+            // PriorityQueue automatically provides the highest priority element
+            Request request = queue.poll();
             
             System.out.printf("[Queue] Retrieved %s request (%.2f MB) - Queue size: %d%n",
                 request.getType().getDisplayName(),
                 request.getSizeMB(),
-                queue.size() - 1);
+                queue.size());
             
             return request;
         } finally {
@@ -195,63 +188,6 @@ public class RequestQueue {
      * 
      * @return Highest priority request (removed from queue)
      */
-    private Request getHighestPriorityRequest() {
-        Request highest = queue.get(0);
-        double highestScore = calculatePriorityScore(highest);
-
-        for (int i = 1; i < queue.size(); i++) {
-            Request current = queue.get(i);
-            double currentScore = calculatePriorityScore(current);
-
-            // Lower score = higher priority
-            if (currentScore < highestScore) {
-                highest = current;
-                highestScore = currentScore;
-            }
-        }
-
-        queue.remove(highest);
-        return highest;
-    }
-
-    /**
-     * Calculate priority score for a request.
-     * 
-     * Lower score = higher priority
-     * 
-     * Formula:
-     * ```
-     * baseScore = fileSize (in MB)
-     * ageMs = current time - creation time
-     * agingBoosts = floor(ageMs / AGING_THRESHOLD_MS)
-     * agingFactor = pow(AGING_PRIORITY_BOOST, agingBoosts)
-     * priorityScore = baseScore / agingFactor
-     * ```
-     * 
-     * Examples:
-     * - 1 MB file, age 0ms: score = 1.0
-     * - 1 MB file, age 5s: score = 0.67 (boosted)
-     * - 5 MB file, age 0ms: score = 5.0
-     * - 5 MB file, age 5s: score = 3.33 (boosted)
-     * 
-     * @param request Request to score
-     * @return Priority score (lower = higher priority)
-     */
-    private double calculatePriorityScore(Request request) {
-        double baseScore = request.getSizeMB();
-        long ageMs = request.getAgeMs();
-
-        // Calculate aging boost
-        long agingIntervals = ageMs / AGING_THRESHOLD_MS;
-        double agingFactor = Math.pow(AGING_PRIORITY_BOOST, agingIntervals);
-
-        // Score increases with size, decreases with age
-        // Lower score = higher priority
-        double priorityScore = baseScore / agingFactor;
-
-        return priorityScore;
-    }
-
     /**
      * Get a string representation of the queue.
      * Shows all pending requests in order.
@@ -265,12 +201,15 @@ public class RequestQueue {
             StringBuilder sb = new StringBuilder();
             sb.append("RequestQueue{size=").append(queue.size()).append(", requests=[");
             
-            for (int i = 0; i < queue.size(); i++) {
-                if (i > 0) sb.append(", ");
-                Request req = queue.get(i);
+            // Note: Iterating over a PriorityQueue does not guarantee order.
+            // This is just for a snapshot/debugging view.
+            int count = 0;
+            for (Request req : queue) {
+                if (count > 0) sb.append(", ");
                 sb.append(String.format("%s(%.2f MB)", 
                     req.getType().getDisplayName(), 
                     req.getSizeMB()));
+                count++;
             }
             
             sb.append("]}");
