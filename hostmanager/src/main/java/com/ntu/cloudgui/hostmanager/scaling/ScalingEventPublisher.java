@@ -1,136 +1,41 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.ntu.cloudgui.hostmanager.scaling;
 
+import com.google.gson.Gson;
+import com.ntu.cloudgui.hostmanager.mqtt.MqttConnectionManager;
+import com.ntu.cloudgui.hostmanager.mqtt.MqttConstants;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+
+import java.util.HashMap;
+import java.util.Map;
+
 /**
- * Publishes scaling-related events to MQTT
+ * Publishes scaling events to the MQTT broker.
  */
 public class ScalingEventPublisher {
-    
+
     private static final Logger logger = LogManager.getLogger(ScalingEventPublisher.class);
-    
-    private MqttConnectionManager mqttConnectionManager;
-    private Gson gson = new Gson();
-    
-    /**
-     * Constructor
-     */
+
+    private final MqttConnectionManager mqttConnectionManager;
+    private final Gson gson;
+
     public ScalingEventPublisher(MqttConnectionManager mqttConnectionManager) {
         this.mqttConnectionManager = mqttConnectionManager;
-        logger.info("ScalingEventPublisher initialized");
+        this.gson = new Gson();
     }
-    
-    /**
-     * Publish scale-up started event
-     */
-    public void publishScaleUpStarted(int quantity) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("eventType", "SCALE_UP_STARTED");
-        event.put("quantity", quantity);
-        event.put("timestamp", System.currentTimeMillis());
-        
-        publishEvent(MqttConstants.TOPIC_EVENTS, event);
-    }
-    
-    /**
-     * Publish scale-up complete event
-     */
-    public void publishScaleUpComplete(List<String> containerNames) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("eventType", "SCALE_UP_COMPLETE");
-        event.put("containerNames", containerNames);
-        event.put("quantity", containerNames.size());
-        event.put("timestamp", System.currentTimeMillis());
-        
-        publishEvent(MqttConstants.TOPIC_STATUS, event);
-    }
-    
-    /**
-     * Publish scale-down started event
-     */
-    public void publishScaleDownStarted(int quantity) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("eventType", "SCALE_DOWN_STARTED");
-        event.put("quantity", quantity);
-        event.put("timestamp", System.currentTimeMillis());
-        
-        publishEvent(MqttConstants.TOPIC_EVENTS, event);
-    }
-    
-    /**
-     * Publish scale-down complete event
-     */
-    public void publishScaleDownComplete(List<String> containerNames) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("eventType", "SCALE_DOWN_COMPLETE");
-        event.put("containerNames", containerNames);
-        event.put("quantity", containerNames.size());
-        event.put("timestamp", System.currentTimeMillis());
-        
-        publishEvent(MqttConstants.TOPIC_STATUS, event);
-    }
-    
-    /**
-     * Publish container started event
-     */
-    public void publishContainerStarted(String containerName, int port) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("eventType", "CONTAINER_STARTED");
-        event.put("containerName", containerName);
-        event.put("port", port);
-        event.put("timestamp", System.currentTimeMillis());
-        
-        publishEvent(MqttConstants.TOPIC_EVENTS, event);
-    }
-    
-    /**
-     * Publish container stopped event
-     */
-    public void publishContainerStopped(String containerName) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("eventType", "CONTAINER_STOPPED");
-        event.put("containerName", containerName);
-        event.put("timestamp", System.currentTimeMillis());
-        
-        publishEvent(MqttConstants.TOPIC_EVENTS, event);
-    }
-    
-    /**
-     * Publish health status
-     */
-    public void publishHealthStatus(List<ContainerInfo> containers) {
-        Map<String, Object> status = new HashMap<>();
-        status.put("eventType", "HEALTH_STATUS");
-        status.put("activeContainers", containers.size());
-        status.put("healthyContainers", 
-                   containers.stream().filter(ContainerInfo::isHealthy).count());
-        status.put("timestamp", System.currentTimeMillis());
-        status.put("containers", containers.stream()
-            .map(c -> Map.of("name", c.getContainerName(), "status", c.getStatus()))
-            .toList());
-        
-        publishEvent(MqttConstants.TOPIC_STATUS, status);
-    }
-    
-    /**
-     * Generic event publisher
-     */
-    private void publishEvent(String topic, Map<String, Object> event) {
+
+    public void publishScalingEvent(String action, String containerName) {
         try {
-            String jsonMessage = gson.toJson(event);
-            
-            boolean published = mqttConnectionManager.publish(topic, jsonMessage);
-            
-            if (published) {
-                logger.debug("Event published to {}: {}", topic, event.get("eventType"));
-            } else {
-                logger.warn("Failed to publish event to topic: {}", topic);
-            }
-            
+            Map<String, String> payload = new HashMap<>();
+            payload.put("action", action);
+            payload.put("containerName", containerName);
+            String jsonPayload = gson.toJson(payload);
+            MqttMessage message = new MqttMessage(jsonPayload.getBytes());
+            message.setQos(1);
+            mqttConnectionManager.publish(MqttConstants.TOPIC_SCALING_EVENTS, message);
         } catch (Exception e) {
-            logger.error("Error publishing event", e);
+            logger.error("Failed to publish scaling event", e);
         }
     }
 }

@@ -1,19 +1,25 @@
 package com.ntu.cloudgui.hostmanager;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import java.util.*;
-import java.util.concurrent.*;
-
 import com.ntu.cloudgui.hostmanager.config.ApplicationConfig;
 import com.ntu.cloudgui.hostmanager.container.ContainerManager;
 import com.ntu.cloudgui.hostmanager.docker.DockerCommandExecutor;
-import com.ntu.cloudgui.hostmanager.docker.DockerConstants;
+import com.ntu.cloudgui.hostmanager.health.HealthCheckManager;
+import com.ntu.cloudgui.hostmanager.model.ScalingRequest;
 import com.ntu.cloudgui.hostmanager.mqtt.MqttConnectionManager;
 import com.ntu.cloudgui.hostmanager.mqtt.MqttConstants;
-import com.ntu.cloudgui.hostmanager.scaling.ScalingLogic;
+import com.ntu.cloudgui.hostmanager.mqtt.MqttMessageParser;
 import com.ntu.cloudgui.hostmanager.scaling.ScalingEventPublisher;
-import com.ntu.cloudgui.hostmanager.health.HealthCheckManager;
+import com.ntu.cloudgui.hostmanager.scaling.ScalingLogic;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * HostManager - Main Application Entry Point
@@ -46,6 +52,7 @@ public class HostManager {
     private ScalingLogic scalingLogic;
     private ScalingEventPublisher eventPublisher;
     private HealthCheckManager healthCheckManager;
+    private MqttMessageParser mqttMessageParser;
     
     // Application state
     private volatile boolean isRunning = false;
@@ -104,8 +111,12 @@ public class HostManager {
                 dockerExecutor,
                 eventPublisher
             );
+
+            // 7. MQTT Message Parser
+            logger.info("Initializing MQTT Message Parser...");
+            this.mqttMessageParser = new MqttMessageParser();
             
-            // 7. Thread Pools for Async Operations
+            // 8. Thread Pools for Async Operations
             this.healthCheckScheduler = Executors.newScheduledThreadPool(2);
             this.taskExecutor = Executors.newFixedThreadPool(4);
             
@@ -170,7 +181,7 @@ public class HostManager {
             // Topic: loadbalancer/scaling/requests
             // Message format: {"action": "SCALE_UP|SCALE_DOWN", "quantity": N}
             mqttConnectionManager.subscribe(MqttConstants.TOPIC_SCALING_REQUESTS, (topic, message) -> {
-                taskExecutor.submit(() -> handleScalingRequest(message));
+                taskExecutor.submit(() -> handleScalingRequest(new String(message.getPayload())));
             });
             
             logger.info("Subscribed to MQTT topic: {}", MqttConstants.TOPIC_SCALING_REQUESTS);
@@ -189,11 +200,15 @@ public class HostManager {
         try {
             logger.info("Received scaling request: {}", message);
             
-            // Parse MQTT message (e.g., {"action": "SCALE_UP", "quantity": 2})
-            // TODO: Implement JSON parsing when MqttMessageParser is created
+            ScalingRequest request = mqttMessageParser.parse(message);
             
-            // Example: if (action.equals("SCALE_UP")) scalingLogic.handleScaleUp(quantity);
-            // Example: if (action.equals("SCALE_DOWN")) scalingLogic.handleScaleDown(quantity);
+            if ("up".equalsIgnoreCase(request.getAction())) {
+                scalingLogic.handleScaleUp(request.getCount());
+            } else if ("down".equalsIgnoreCase(request.getAction())) {
+                scalingLogic.handleScaleDown(request.getCount());
+            } else {
+                logger.warn("Unknown scaling action: {}", request.getAction());
+            }
             
         } catch (Exception e) {
             logger.error("Error handling scaling request", e);
