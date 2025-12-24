@@ -12,7 +12,7 @@ services:
     networks:
       - soft40051_network
 
-  load-balancer:
+  lb:
     build:
       context: ./cloudlb
     image: cloudlb:latest
@@ -25,6 +25,13 @@ services:
       context: ./AggService
     image: aggservice:latest
     container_name: aggregator
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://lamp-server:3306/cloud_gui?useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: changeme
+      SFTP_HOSTS: soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
+      SFTP_USERNAME: user
+      SFTP_PASSWORD: password
     networks:
       - soft40051_network
 
@@ -61,11 +68,13 @@ services:
       - soft40051_network
 
   lamp-server:
-    image: lamp-server
+    image: mysql:5.7
     container_name: lamp-server
     ports:
       - "3306:3306"
-      - "8080:80"
+    environment:
+      MYSQL_ROOT_PASSWORD: changeme
+      MYSQL_DATABASE: cloud_gui
     networks:
       - soft40051_network
 
