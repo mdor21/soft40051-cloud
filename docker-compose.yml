@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   ntu-vm-soft40051:
-    build:
-      context: ./cloud-gui
-    image: cloud-gui:latest
+    image: pedrombmachado/ntu_lubuntu:soft40051
     container_name: ntu-vm-soft40051
     ports:
       - "3390:3389"
@@ -13,8 +11,10 @@ services:
       DB_HOST: lamp-server
       DB_PORT: 3306
       DB_NAME: cloud_gui
-      DB_USER: admin
+      DB_USER: root
       DB_PASS: changeme
+    volumes:
+      - docker_soft40051:/home/ntu
     networks:
       - soft40051_network
 
@@ -22,7 +22,7 @@ services:
     build:
       context: ./cloudlb
     image: cloudlb:latest
-    container_name: load-balancer
+    container_name: lb
     networks:
       - soft40051_network
 
@@ -74,18 +74,20 @@ services:
       - soft40051_network
 
   lamp-server:
-    image: mysql:5.7
+    image: mattrayner/lamp:latest-1804
     container_name: lamp-server
     ports:
+      - "8080:80"
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: changeme
-      MYSQL_DATABASE: cloud_gui
+    volumes:
+      - lamp:/var/lib/mysql
     networks:
       - soft40051_network
 
   mqtt-broker:
-    image: eclipse-mosquitto
+    image: pedrombmachado/mqtt:base
     container_name: mqtt-broker
     ports:
       - "1883:1883"
@@ -102,6 +104,38 @@ services:
     networks:
       - soft40051_network
 
+  jenkins-soft40051:
+    image: jenkins/jenkins:latest
+    container_name: jenkins-soft40051
+    ports:
+      - "8081:8080"
+      - "50001:50000"
+    volumes:
+      - jenkins_soft40051:/var/jenkins_home
+    environment:
+      GITHUB_REPO: "https://github.com/mdor21/soft40051-cloud"
+    networks:
+      - soft40051_network
+
+  gitea:
+    image: docker.gitea.com/gitea:latest
+    container_name: gitea
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    volumes:
+      - gitea_data:/data
+      - gitea_config:/etc/gitea
+    networks:
+      - soft40051_network
+
 networks:
   soft40051_network:
     driver: bridge
+
+volumes:
+  docker_soft40051:
+  lamp:
+  jenkins_soft40051:
+  gitea_data:
+  gitea_config:
