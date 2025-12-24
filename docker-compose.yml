@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  ntu-vm-soft40051:
+    build:
+      context: ./cloud-gui
+    image: cloud-gui:latest
+    container_name: ntu-vm-soft40051
+    ports:
+      - "3390:3389"
+      - "2022:22"
+    networks:
+      - soft40051_network
+
+  load-balancer:
+    build:
+      context: ./cloudlb
+    image: cloudlb:latest
+    container_name: load-balancer
+    networks:
+      - soft40051_network
+
+  aggregator:
+    build:
+      context: ./AggService
+    image: aggservice:latest
+    container_name: aggregator
+    networks:
+      - soft40051_network
+
+  soft40051-files-container1:
+    image: pedrombmachado/simple-ssh-container:base
+    container_name: soft40051-files-container1
+    ports:
+      - "4848:22"
+    networks:
+      - soft40051_network
+
+  soft40051-files-container2:
+    image: pedrombmachado/simple-ssh-container:base
+    container_name: soft40051-files-container2
+    ports:
+      - "4849:22"
+    networks:
+      - soft40051_network
+
+  soft40051-files-container3:
+    image: pedrombmachado/simple-ssh-container:base
+    container_name: soft40051-files-container3
+    ports:
+      - "4850:22"
+    networks:
+      - soft40051_network
+
+  soft40051-files-container4:
+    image: pedrombmachado/simple-ssh-container:base
+    container_name: soft40051-files-container4
+    ports:
+      - "4851:22"
+    networks:
+      - soft40051_network
+
+  lamp-server:
+    image: lamp-server
+    container_name: lamp-server
+    ports:
+      - "3306:3306"
+      - "8080:80"
+    networks:
+      - soft40051_network
+
+  mqtt-broker:
+    image: eclipse-mosquitto
+    container_name: mqtt-broker
+    ports:
+      - "1883:1883"
+    networks:
+      - soft40051_network
+
+  host-manager:
+    build:
+      context: ./hostmanager
+    image: hostmanager:latest
+    container_name: host-manager
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - soft40051_network
+
+networks:
+  soft40051_network:
+    driver: bridge

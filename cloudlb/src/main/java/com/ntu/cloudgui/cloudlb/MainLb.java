@@ -2,30 +2,27 @@ package com.ntu.cloudgui.cloudlb;
 
 import com.ntu.cloudgui.cloudlb.core.*;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
 /**
  * MainLb - Load Balancer Entry Point
- * 
+ *
  * Initializes and starts the complete load balancing system:
  * - Creates RequestQueue (thread-safe request buffer)
  * - Initializes NodeRegistry (storage node management)
  * - Registers storage nodes from configuration
  * - Selects and initializes Scheduler (FCFS/SJN/RoundRobin)
  * - Starts HealthChecker (monitors node health every 5 seconds)
+ * - Starts ScalingService (monitors queue and requests scaling)
  * - Starts LoadBalancerWorker (processes requests from queue)
  * - Starts HTTP API server
- * 
+ *
  * Configuration via environment variables:
  * - NODE_COUNT: Number of storage nodes (default: 2)
  * - SCHEDULER_TYPE: Scheduling algorithm (FCFS/SJN/ROUNDROBIN, default: ROUNDROBIN)
- * 
- * Usage:
- * ```
- * # Default (2 nodes, RoundRobin)
- * java -jar cloudlb-1.0-SNAPSHOT.jar
- * 
- * # Custom (4 nodes, FCFS)
- * NODE_COUNT=4 SCHEDULER_TYPE=FCFS java -jar cloudlb-1.0-SNAPSHOT.jar
- * ```
+ *
  */
 public class MainLb {
 
@@ -34,12 +31,16 @@ public class MainLb {
     private static final String DEFAULT_SCHEDULER = "ROUNDROBIN";
     private static final int API_SERVER_PORT = 8080;
     private static final int HEALTH_CHECK_INTERVAL_MS = 5000;  // 5 seconds
+    private static final int SCALING_CHECK_INTERVAL_MS = 10000; // 10 seconds
+    private static final String MQTT_BROKER_URL = "tcp://mqtt-broker:1883";
+    private static final String MQTT_CLIENT_ID = "cloudlb";
+    private static final String MQTT_TOPIC = "lb/scale/request";
 
     // Node configuration
     private static final String[] NODE_NAMES = {
         "node-1", "node-2", "node-3", "node-4", "node-5"
     };
-    
+
     private static final String[] NODE_ADDRESSES = {
         "aggservice-1:8080",
         "aggservice-2:8080",
@@ -50,7 +51,7 @@ public class MainLb {
 
     /**
      * Main entry point for Load Balancer.
-     * 
+     *
      * @param args Command line arguments (not used; config via env vars)
      */
     public static void main(String[] args) {
@@ -80,8 +81,16 @@ public class MainLb {
             healthCheckerThread.setName("HealthChecker");
             healthCheckerThread.setDaemon(true);
             healthCheckerThread.start();
-            System.out.printf("[Main] ✓ Health checker started (interval: %d ms)%n", 
+            System.out.printf("[Main] ✓ Health checker started (interval: %d ms)%n",
                 HEALTH_CHECK_INTERVAL_MS);
+
+            // Start scaling service
+            System.out.println("[Main] Starting Scaling Service...");
+            ScalingService scalingService = new ScalingService(requestQueue, MQTT_BROKER_URL, MQTT_CLIENT_ID, MQTT_TOPIC);
+            ScheduledExecutorService scalingScheduler = Executors.newSingleThreadScheduledExecutor();
+            scalingScheduler.scheduleAtFixedRate(scalingService::checkAndScale, 0, SCALING_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
+            System.out.printf("[Main] ✓ Scaling service started (interval: %d ms)%n", SCALING_CHECK_INTERVAL_MS);
+
 
             // Start load balancer worker
             System.out.println("[Main] Starting Load Balancer Worker...");
@@ -99,10 +108,10 @@ public class MainLb {
                 LoadBalancerAPIServer apiServer = new LoadBalancerAPIServer(
                     requestQueue, API_SERVER_PORT);
                 apiServer.start();  // Blocking call - starts HTTP server
-                System.out.printf("[Main] ✓ HTTP API Server listening on port %d%n", 
+                System.out.printf("[Main] ✓ HTTP API Server listening on port %d%n",
                     API_SERVER_PORT);
             } catch (Exception e) {
-                System.err.printf("[Main] Warning: Could not start API server: %s%n", 
+                System.err.printf("[Main] Warning: Could not start API server: %s%n",
                     e.getMessage());
                 System.err.println("[Main] Continuing without API server...");
             }
@@ -130,7 +139,7 @@ public class MainLb {
 
     /**
      * Get node count from environment variable.
-     * 
+     *
      * @return Number of nodes to register (1-5, default: 2)
      */
     private static int getNodeCount() {
@@ -153,7 +162,7 @@ public class MainLb {
 
     /**
      * Get scheduler type from environment variable.
-     * 
+     *
      * @return Scheduler type (FCFS/SJN/ROUNDROBIN, default: ROUNDROBIN)
      */
     private static String getSchedulerType() {
@@ -171,7 +180,7 @@ public class MainLb {
 
     /**
      * Create scheduler instance based on type.
-     * 
+     *
      * @param schedulerType Type of scheduler (FCFS/SJN/ROUNDROBIN)
      * @return Scheduler instance
      */
@@ -180,15 +189,15 @@ public class MainLb {
             case "FCFS":
                 System.out.println("[Main] Scheduler: FCFS (First Come First Serve)");
                 return new FcfsScheduler();
-            
+
             case "SJN":
                 System.out.println("[Main] Scheduler: SJN (Shortest Job Next)");
                 return new SjnScheduler();
-            
+
             case "ROUNDROBIN":
                 System.out.println("[Main] Scheduler: ROUNDROBIN (Cyclic Distribution)");
                 return new RoundRobinScheduler();
-            
+
             default:
                 throw new IllegalArgumentException("Unknown scheduler type: " + schedulerType);
         }
@@ -196,7 +205,7 @@ public class MainLb {
 
     /**
      * Register storage nodes in the registry.
-     * 
+     *
      * @param nodeRegistry Registry to register nodes in
      * @param nodeCount Number of nodes to register
      */
