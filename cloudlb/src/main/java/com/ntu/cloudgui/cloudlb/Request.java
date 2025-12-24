@@ -18,7 +18,7 @@ package com.ntu.cloudgui.cloudlb;
  * Request downloadReq = new Request(fileId, Request.Type.DOWNLOAD, 0, priority);
  * ```
  */
-public class Request {
+public class Request implements Comparable<Request> {
 
     /**
      * Request Type Enumeration
@@ -186,5 +186,43 @@ public class Request {
     @Override
     public int hashCode() {
         return id.hashCode();
+    }
+
+    /**
+     * Compares this request with another request for priority ordering.
+     *
+     * The request with the lower priority score is considered "less than"
+     * the other, meaning it has higher priority and should come first in
+     * a priority queue.
+     *
+     * @param other The other request to compare to.
+     * @return A negative integer, zero, or a positive integer as this request
+     *         has higher, equal, or lower priority than the specified request.
+     */
+    @Override
+    public int compareTo(Request other) {
+        double thisScore = this.calculatePriorityScore();
+        double otherScore = other.calculatePriorityScore();
+        return Double.compare(thisScore, otherScore);
+    }
+
+    /**
+     * Calculates the priority score for this request.
+     * Lower score = higher priority.
+     *
+     * @return The priority score.
+     */
+    private double calculatePriorityScore() {
+        // These constants should ideally be configurable
+        final int AGING_THRESHOLD_MS = 5000;  // 5 seconds
+        final double AGING_PRIORITY_BOOST = 1.5; // 50% boost per 5s
+
+        double baseScore = this.getSizeMB();
+        long ageMs = this.getAgeMs();
+
+        long agingIntervals = ageMs / AGING_THRESHOLD_MS;
+        double agingFactor = Math.pow(AGING_PRIORITY_BOOST, agingIntervals);
+
+        return baseScore / agingFactor;
     }
 }
