@@ -54,6 +54,7 @@ public class FileProcessingService {
     private final ChunkStorageService storageService;
     private final CrcValidationService crcService;
     private final MetadataService metadataService;
+    private final DatabaseLoggingService dbLogger;
 
     public FileProcessingService(FileMetadataRepository fileRepo,
                                  ChunkMetadataRepository chunkRepo,
@@ -61,6 +62,7 @@ public class FileProcessingService {
                                  ChunkStorageService storageService,
                                  CrcValidationService crcService,
                                  MetadataService metadataService,
+                                 DatabaseLoggingService dbLogger,
                                  @Value("${semaphore.permits:10}") int semaphorePermits) {
         this.fileRepo = fileRepo;
         this.chunkRepo = chunkRepo;
@@ -68,6 +70,7 @@ public class FileProcessingService {
         this.storageService = storageService;
         this.crcService = crcService;
         this.metadataService = metadataService;
+        this.dbLogger = dbLogger;
         this.fileOperationSemaphore = new Semaphore(semaphorePermits);
     }
 
@@ -99,6 +102,7 @@ public class FileProcessingService {
             throws ProcessingException {
 
         logger.info("Attempting to acquire lock for file upload: {}", file.getName());
+        dbLogger.info(String.format("Upload initiated for file: %s", file.getName()));
         try {
             fileOperationSemaphore.acquire();
             logger.info("Lock acquired for file upload: {}", file.getName());
@@ -127,14 +131,17 @@ public class FileProcessingService {
 
                 logger.info("✓ File upload completed successfully: {} ({} chunks)",
                         fileId, chunkMetadataList.size());
+                dbLogger.info(String.format("File upload successful for %s. File ID: %s", file.getName(), fileId));
                 return fileId;
 
             } catch (ProcessingException e) {
                 logger.error("✗ File upload failed, rolling back: {}", e.getMessage());
+                dbLogger.error(String.format("File upload failed for %s: %s", file.getName(), e.getMessage()));
                 rollbackFileUpload(fileId);
                 throw e;
             } catch (Exception e) {
                 logger.error("✗ Unexpected error during upload, rolling back: {}", e.getMessage(), e);
+                dbLogger.error(String.format("Unexpected error during upload for %s: %s", file.getName(), e.getMessage()));
                 rollbackFileUpload(fileId);
                 throw new ProcessingException(
                         "Unexpected error during file processing: " + e.getMessage(),
@@ -144,6 +151,7 @@ public class FileProcessingService {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            dbLogger.error("File upload was interrupted while waiting for lock for file: " + file.getName());
             throw new ProcessingException("File upload was interrupted while waiting for lock", ErrorType.PROCESSING_ERROR, e);
         } finally {
             fileOperationSemaphore.release();
@@ -180,7 +188,9 @@ public class FileProcessingService {
                     // Optional: CRC32 validation
                     long crc32 = crcService.calculateCrc32(decryptedChunk);
                     if (crc32 != chunkMetadata.getCrc32()) {
-                        throw new ProcessingException("CRC32 checksum mismatch for chunk " + chunkMetadata.getChunkIndex(), ErrorType.VALIDATION_ERROR);
+                        String errorMsg = String.format("CRC32 checksum mismatch for file %s, chunk %d", fileId, chunkMetadata.getChunkIndex());
+                        dbLogger.error(errorMsg);
+                        throw new ProcessingException(errorMsg, ErrorType.VALIDATION_ERROR);
                     }
 
                     reassembledFile.write(decryptedChunk);
