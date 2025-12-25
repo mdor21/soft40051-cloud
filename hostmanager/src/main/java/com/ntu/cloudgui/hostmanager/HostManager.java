@@ -1,6 +1,5 @@
 package com.ntu.cloudgui.hostmanager;
 
-import com.ntu.cloudgui.hostmanager.config.ApplicationConfig;
 import com.ntu.cloudgui.hostmanager.container.ContainerManager;
 import com.ntu.cloudgui.hostmanager.docker.DockerCommandExecutor;
 import com.ntu.cloudgui.hostmanager.health.HealthCheckManager;
@@ -59,15 +58,11 @@ public class HostManager {
     private ScheduledExecutorService healthCheckScheduler;
     private ExecutorService taskExecutor;
     
-    // Configuration
-    private ApplicationConfig applicationConfig;
-    
     /**
      * Constructor - Initializes all managers
      */
     public HostManager() {
         logger.info("========== HostManager Initialization Started ==========");
-        this.applicationConfig = new ApplicationConfig();
         initializeManagers();
         logger.info("========== HostManager Initialization Complete ==========");
     }
