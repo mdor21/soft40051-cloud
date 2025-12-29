@@ -15,12 +15,13 @@ services:
       DB_PASS: changeme
     volumes:
       - docker_soft40051:/home/ntu
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - soft40051_network
 
   lb:
     build:
-      context: ./cloudlb
+      context: ./services/load-balancer
     image: cloudlb:latest
     container_name: lb
     networks:
@@ -28,7 +29,7 @@ services:
 
   aggregator:
     build:
-      context: ./AggService
+      context: ./services/aggregator
     image: aggservice:latest
     container_name: aggregator
     environment:
@@ -96,7 +97,7 @@ services:
 
   host-manager:
     build:
-      context: ./hostmanager
+      context: ./services/host-manager
     image: hostmanager:latest
     container_name: host-manager
     volumes:
