@@ -1,21 +1,18 @@
-# Maven build artifacts
+# Maven
 target/
 *.jar
-dependency-reduced-pom.xml
+*.class
 
-# IDE files
+# Logs
+*.log
+
+# OS files
+.DS_Store
+
+# IDE
 .idea/
 .vscode/
 *.iml
-nb-configuration.xml
-nbactions.xml
 
-# Log files
-*.log
-
-# Environment files (NEVER commit secrets)
+# Env
 .env
-
-# OS-specific files
-.DS_Store
-Thumbs.db
