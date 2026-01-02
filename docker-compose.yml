@@ -18,13 +18,32 @@ services:
     networks:
       - soft40051_network
 
-  lb:
+  cloud-gui:
+    build:
+      context: ./cloud-gui
+    container_name: cloud-gui
+    ports:
+      - "8080:8080"
+    depends_on:
+      - cloudlb
+      - lamp-server
+    networks:
+      - cloud-network
+
+  cloudlb:
     build:
       context: ./cloudlb
-    image: cloudlb:latest
-    container_name: lb
+    container_name: cloudlb
+    ports:
+      - "8081:8081"
+    environment:
+      - SCHEDULER=ROUND_ROBIN
+      - MQTT_BROKER_URL=mqtt-broker:1883
+    depends_on:
+      - mqtt-broker
+      - lamp-server
     networks:
-      - soft40051_network
+      - cloud-network
 
   aggregator:
     build:
@@ -40,6 +59,18 @@ services:
       SFTP_PASSWORD: password
     networks:
       - soft40051_network
+
+  aggservice:
+    build:
+      context: ./AggService
+    container_name: aggservice
+    scale: 2
+    ports:
+      - "8082-8083:8082-8083"
+    depends_on:
+      - lamp-server
+    networks:
+      - cloud-network
 
   soft40051-files-container1:
     image: pedrombmachado/simple-ssh-container:base
@@ -74,25 +105,26 @@ services:
       - soft40051_network
 
   lamp-server:
-    image: mattrayner/lamp:latest-1804
+    image: mysql:8.0
     container_name: lamp-server
-    ports:
-      - "8080:80"
-      - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: changeme
-    volumes:
-      - lamp:/var/lib/mysql
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: cloud
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
     networks:
-      - soft40051_network
+      - cloud-network
 
   mqtt-broker:
-    image: pedrombmachado/mqtt:base
+    image: eclipse-mosquitto:2.0
     container_name: mqtt-broker
     ports:
       - "1883:1883"
+      - "9001:9001"
     networks:
-      - soft40051_network
+      - cloud-network
 
   host-manager:
     build:
@@ -103,6 +135,17 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - soft40051_network
+
+  hostmanager:
+    build:
+      context: ./hostmanager
+    container_name: hostmanager
+    environment:
+      - MQTT_BROKER_URL=mqtt-broker:1883
+    depends_on:
+      - mqtt-broker
+    networks:
+      - cloud-network
 
   jenkins-soft40051:
     image: jenkins/jenkins:latest
@@ -131,6 +174,8 @@ services:
 
 networks:
   soft40051_network:
+    driver: bridge
+  cloud-network:
     driver: bridge
 
 volumes:

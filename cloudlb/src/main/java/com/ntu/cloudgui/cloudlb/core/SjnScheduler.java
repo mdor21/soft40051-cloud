@@ -3,6 +3,8 @@ package com.ntu.cloudgui.cloudlb.core;
 import com.ntu.cloudgui.cloudlb.Request;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * SjnScheduler - Shortest Job Next Scheduler
@@ -19,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SjnScheduler implements Scheduler {
 
     private static final String LOG_PREFIX = "[SJN]";
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
     private final AtomicInteger currentIndex = new AtomicInteger(0);
 
     /**
@@ -44,7 +47,9 @@ public class SjnScheduler implements Scheduler {
     @Override
     public StorageNode selectNode(List<StorageNode> healthyNodes, Request request) {
         if (healthyNodes == null || healthyNodes.isEmpty()) {
-            System.out.printf("%s No healthy nodes available%n", LOG_PREFIX);
+            String timestamp = LocalDateTime.now().format(TIME_FORMAT);
+            System.out.printf("[%s] %s No healthy nodes available for request %s%n", 
+                timestamp, LOG_PREFIX, request.getId());
             return null;
         }
 
@@ -52,11 +57,15 @@ public class SjnScheduler implements Scheduler {
         int index = Math.abs(currentIndex.getAndIncrement()) % healthyNodes.size();
         StorageNode selectedNode = healthyNodes.get(index);
 
-        System.out.printf("%s Selected node %s for shortest job %s (%.2f MB)%n",
+        String timestamp = LocalDateTime.now().format(TIME_FORMAT);
+        System.out.printf("[%s] %s Selected node %s for request %s (%.2f MB) | Operation: %s | Wait Time: %dms%n",
+            timestamp,
             LOG_PREFIX,
             selectedNode.getName(),
             request.getId(),
-            request.getSizeMB());
+            request.getSizeMB(),
+            request.getOperation(),
+            System.currentTimeMillis() - request.getCreationTime());
 
         return selectedNode;
     }

@@ -225,4 +225,12 @@ public class Request implements Comparable<Request> {
 
         return baseScore / agingFactor;
     }
+
+    public long getCreationTime() {
+        return createdTimeMs;
+    }
+
+    public String getOperation() {
+        return type.getDisplayName();
+    }
 }
