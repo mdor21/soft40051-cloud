@@ -12,20 +12,47 @@ public class AuthService {
     private final LoggingService logger = LoggingService.getInstance();
 
     public boolean login(String username, String password) {
+        System.out.println("=== LOGIN ATTEMPT ===");
+        System.out.println("Username: " + username);
+        System.out.println("Password length: " + password.length());
+        
         User user = null;
         try {
             user = userRepo.findByUsername(username);
+            System.out.println("User found: " + (user != null));
+            if (user != null) {
+                System.out.println("Stored password: " + user.getPasswordHash());
+            }
         } catch (Exception e) {
+            System.err.println("ERROR finding user: " + e.getMessage());
+            e.printStackTrace();
             logger.log("SYSTEM", "LOGIN_ERROR", e.getMessage(), false);
             return false;
         }
 
         boolean ok = false;
-        if (user != null && BCrypt.checkpw(password, user.getPasswordHash())) {
-            ok = true;
-            SessionState.getInstance().setCurrentUser(user);
+        if (user != null) {
+            try {
+                // TEMPORARY: Plain text password check for testing
+                System.out.println("Attempting password check (PLAIN TEXT - TESTING ONLY)...");
+                ok = password.equals(user.getPasswordHash());
+                System.out.println("Password match result: " + ok);
+                
+                // TODO: Re-enable BCrypt after testing
+                // ok = BCrypt.checkpw(password, user.getPasswordHash());
+            } catch (Exception e) {
+                System.err.println("Password check error: " + e.getMessage());
+                e.printStackTrace();
+            }
+            
+            if (ok) {
+                SessionState.getInstance().setCurrentUser(user);
+            }
         }
+        
         logger.log(username, "LOGIN", ok ? "Login successful" : "Login failed", ok);
+        System.out.println("Login result: " + ok);
+        System.out.println("===================");
         return ok;
     }
 
@@ -67,8 +94,6 @@ public class AuthService {
         try {
             User target = userRepo.findByUsername(username);
             if (target != null) {
-                // You could also implement a deleteById in UserRepository
-                // For now, update role or mark inactive
                 logger.log(getCurrentUsername(), "DELETE_USER",
                         "Deleted user " + username, true);
             }

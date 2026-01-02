@@ -8,7 +8,6 @@
 
 package com.ntu.cloudgui.app.db;
 
-import static com.ntu.cloudgui.app.db.MySqlConnectionManager.getConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -62,7 +61,8 @@ public class SessionCacheRepository {
             System.err.println("Failed to create cache directory: " + e.getMessage());
         }
 
-        try (Connection conn = getConnection();
+        // FIXED: Use SQLite connection instead of MySQL
+        try (Connection conn = DriverManager.getConnection(JDBC_URL);
              Statement stmt = conn.createStatement()) {
 
             // Create session_users table for caching user data
@@ -70,7 +70,7 @@ public class SessionCacheRepository {
                 "CREATE TABLE IF NOT EXISTS session_users (" +
                 "  id INTEGER PRIMARY KEY," +
                 "  username TEXT UNIQUE NOT NULL," +
-                "  password_hash TEXT NOT NULL," +
+                "  password TEXT NOT NULL," +
                 "  role TEXT NOT NULL," +
                 "  last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
                 ")"
