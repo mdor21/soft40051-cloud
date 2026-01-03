@@ -29,116 +29,78 @@ import java.io.IOException;
  */
 public class FilesController {
     
-    @FXML private ListView<String> fileListView;
-    @FXML private Button uploadButton;
-    @FXML private Button downloadButton;
-    @FXML private Label statusLabel;
-    @FXML private ProgressBar uploadProgress;
+    @FXML private ListView<String> filesList;
+    @FXML private TextArea contentArea;
+    @FXML private TextField fileNameField;
     
     private LoadBalancerClient loadBalancerClient;
     
-    /**
-     * Initialize controller
-     */
     @FXML
     public void initialize() {
         loadBalancerClient = new LoadBalancerClient();
-        updateStatus("Ready");
         loadFileList();
     }
     
-    /**
-     * Handle file upload
-     */
     @FXML
     private void handleUpload() {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Select file to upload");
-        File selectedFile = fileChooser.showOpenDialog(null);
+        File file = fileChooser.showOpenDialog(null);
         
-        if (selectedFile == null) return;
-        
-        try {
-            updateStatus("Reading file: " + selectedFile.getName());
-            byte[] fileData = Files.readAllBytes(selectedFile.toPath());
-            
-            updateStatus("Uploading to Load Balancer...");
-            loadBalancerClient.uploadFile(selectedFile.getName(), fileData.length, fileData)
-                .thenAccept(response -> {
-                    if ("SUCCESS".equals(response.status)) {
-                        updateStatus("✓ Upload complete: " + selectedFile.getName());
-                        loadFileList();
-                    } else {
-                        updateStatus("✗ Upload failed: " + response.message);
-                    }
-                })
-                .exceptionally(ex -> {
-                    updateStatus("✗ Upload error: " + ex.getMessage());
-                    return null;
-                });
-                
-        } catch (Exception e) {
-            updateStatus("✗ Error reading file: " + e.getMessage());
+        if (file != null) {
+            try {
+                byte[] fileData = Files.readAllBytes(file.toPath());
+                String fileId = loadBalancerClient.uploadFile(
+                    new java.io.ByteArrayInputStream(fileData),
+                    file.getName(),
+                    file.length()
+                );
+                showInfo("✓ Uploaded: " + file.getName() + " (ID: " + fileId + ")");
+                loadFileList();
+            } catch (IOException e) {
+                showAlert("Upload error: " + e.getMessage());
+            }
         }
     }
     
-    /**
-     * Handle file download
-     */
     @FXML
     private void handleDownload() {
-        String selectedFile = fileListView.getSelectionModel().getSelectedItem();
-        if (selectedFile == null) {
-            updateStatus("Select a file first");
+        String selected = filesList.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert("Select a file to download");
             return;
         }
         
         try {
-            updateStatus("Downloading: " + selectedFile);
-            loadBalancerClient.downloadFile(selectedFile)
-                .thenAccept(response -> {
-                    if ("SUCCESS".equals(response.status)) {
-                        try {
-                            // Save file to disk
-                            Path path = Path.of(System.getProperty("user.home"), "Downloads", selectedFile);
-                            Files.write(path, response.fileData);
-                            updateStatus("✓ Downloaded: " + selectedFile);
-                        } catch (IOException e) {
-                            updateStatus("✗ File write error: " + e.getMessage());
-                        }
-                    } else {
-                        updateStatus("✗ Download failed: " + response.message);
-                    }
-                })
-                .exceptionally(ex -> {
-                    updateStatus("✗ Download error: " + ex.getMessage());
-                    return null;
-                });
-                
-        } catch (Exception e) {
-            updateStatus("✗ Error: " + e.getMessage());
+            // Download file from LoadBalancer
+            byte[] fileData = loadBalancerClient.downloadFile(selected);
+            
+            // Save to local disk
+            Path downloadPath = Path.of(System.getProperty("user.home"), "Downloads", selected);
+            Files.write(downloadPath, fileData);
+            
+            showInfo("✓ Downloaded: " + selected);
+            loadFileList();
+        } catch (IOException e) {
+            showAlert("Download error: " + e.getMessage());
         }
     }
     
-    /**
-     * Reload file list from server
-     */
     private void loadFileList() {
-        loadBalancerClient.getStatus()
-            .thenAccept(status -> {
-                // TODO: Fetch actual file list from server
-                updateStatus("Active nodes: " + status.activeNodes + "/" + status.totalNodes);
-            })
-            .exceptionally(ex -> {
-                updateStatus("⚠ Offline mode - Local SQLite only");
-                return null;
-            });
+        // Implementation
     }
     
-    /**
-     * Update status label
-     */
-    private void updateStatus(String message) {
-        statusLabel.setText(message);
+    private void showAlert(String message) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle("Alert");
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+    
+    private void showInfo(String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Info");
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 }
