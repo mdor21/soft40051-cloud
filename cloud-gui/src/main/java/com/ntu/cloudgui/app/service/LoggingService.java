@@ -1,7 +1,7 @@
 package com.ntu.cloudgui.app.service;
 
 import com.ntu.cloudgui.app.model.LogEntry;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -23,7 +23,7 @@ public class LoggingService {
         e.setAction(action);
         e.setDetails(details);
         e.setSuccess(success);
-        e.setTimestamp(LocalDateTime.now());
+        e.setTimestamp(Instant.now());
         entries.add(0, e);
         // TODO: persist to MySQL and optionally SQLite
     }
