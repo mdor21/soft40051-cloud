@@ -50,13 +50,19 @@ public class FilesController {
         if (file != null) {
             try {
                 byte[] fileData = Files.readAllBytes(file.toPath());
-                String fileId = loadBalancerClient.uploadFile(
-                    new java.io.ByteArrayInputStream(fileData),
+                loadBalancerClient.uploadFile(
                     file.getName(),
-                    file.length()
-                );
-                showInfo("✓ Uploaded: " + file.getName() + " (ID: " + fileId + ")");
-                loadFileList();
+                    file.length(),
+                    fileData
+                )
+                .thenAccept(response -> {
+                    showInfo("✓ Uploaded: " + file.getName() + " (ID: " + response.fileId + ")");
+                    loadFileList();
+                })
+                .exceptionally(ex -> {
+                    showAlert("Upload error: " + ex.getMessage());
+                    return null;
+                });
             } catch (IOException e) {
                 showAlert("Upload error: " + e.getMessage());
             }
@@ -71,23 +77,50 @@ public class FilesController {
             return;
         }
         
-        try {
-            // Download file from LoadBalancer
-            byte[] fileData = loadBalancerClient.downloadFile(selected);
-            
-            // Save to local disk
-            Path downloadPath = Path.of(System.getProperty("user.home"), "Downloads", selected);
-            Files.write(downloadPath, fileData);
-            
-            showInfo("✓ Downloaded: " + selected);
-            loadFileList();
-        } catch (IOException e) {
-            showAlert("Download error: " + e.getMessage());
-        }
+        loadBalancerClient.downloadFile(selected)
+            .thenAccept(response -> {
+                try {
+                    Path downloadPath = Path.of(System.getProperty("user.home"), "Downloads", selected);
+                    Files.write(downloadPath, response.fileData);
+                    showInfo("✓ Downloaded: " + selected);
+                    loadFileList();
+                } catch (IOException e) {
+                    showAlert("Save error: " + e.getMessage());
+                }
+            })
+            .exceptionally(ex -> {
+                showAlert("Download error: " + ex.getMessage());
+                return null;
+            });
     }
     
     private void loadFileList() {
-        // Implementation
+        filesList.getItems().clear();
+        try {
+            Path downloadsPath = Path.of(System.getProperty("user.home"), "Downloads");
+            if (Files.exists(downloadsPath)) {
+                Files.list(downloadsPath)
+                    .filter(Files::isRegularFile)
+                    .map(Path::getFileName)
+                    .map(Path::toString)
+                    .forEach(f -> filesList.getItems().add(f));
+            }
+        } catch (IOException e) {
+            showAlert("Error loading files: " + e.getMessage());
+        }
+        
+        filesList.setOnMouseClicked(event -> {
+            String selected = filesList.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                try {
+                    Path path = Path.of(System.getProperty("user.home"), "Downloads", selected);
+                    String content = Files.readString(path);
+                    contentArea.setText(content);
+                } catch (IOException e) {
+                    contentArea.setText("[Binary file or read error]");
+                }
+            }
+        });
     }
     
     private void showAlert(String message) {
