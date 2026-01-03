@@ -1,0 +1,15 @@
+FROM maven:3.8-openjdk-11 AS builder
+WORKDIR /app
+COPY . .
+RUN mvn clean package -DskipTests -pl soft40051-load-balancer
+
+FROM openjdk:11-jre-slim
+WORKDIR /app
+COPY --from=builder /app/soft40051-load-balancer/target/*.jar load-balancer.jar
+
+EXPOSE 8888
+ENV MQTT_BROKER_HOST=mqtt-broker
+ENV MQTT_BROKER_PORT=1883
+ENV AGGREGATOR_HOST=aggregator
+
+ENTRYPOINT ["java", "-jar", "load-balancer.jar"]

@@ -1,188 +1,139 @@
 package com.ntu.cloudgui.app.controller;
 
-import com.ntu.cloudgui.app.client.LoadBalancerClient;
-import com.ntu.cloudgui.app.model.FileMeta;
-import com.ntu.cloudgui.app.service.FileService;
-import javafx.collections.FXCollections;
+import com.ntu.cloudgui.app.api.LoadBalancerClient;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
-import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.IOException;
-import java.util.Collection;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
+/**
+ * Files Controller - File Upload/Download UI
+ * 
+ * CONNECTIVITY FLOW:
+ * 1. User selects file → Read file data from disk
+ * 2. Create LoadBalancerClient → Send file to Load Balancer (TCP/IP port 8080)
+ * 3. Load Balancer → Routes to Aggregator based on scheduling algorithm
+ * 4. Aggregator → Chunks file, calculates CRC32, distributes to File Servers via SSH
+ * 5. Aggregator → Stores metadata in MySQL
+ * 6. GUI SQLite → Syncs with MySQL for offline capability
+ * 
+ * On Download:
+ * 1. GUI → Load Balancer (TCP/IP) → Aggregator
+ * 2. Aggregator → Retrieves chunks from File Servers (SSH)
+ * 3. Aggregator → Reassembles, verifies CRC32
+ * 4. GUI → Saves to local disk
+ */
 public class FilesController {
-
-    @FXML private ListView<FileMeta> filesList;
-    @FXML private TextField fileNameField;
-    @FXML private TextArea contentArea;
-
-    private final FileService fileService = new FileService();
-
+    
+    @FXML private ListView<String> fileListView;
+    @FXML private Button uploadButton;
+    @FXML private Button downloadButton;
+    @FXML private Label statusLabel;
+    @FXML private ProgressBar uploadProgress;
+    
+    private LoadBalancerClient loadBalancerClient;
+    
+    /**
+     * Initialize controller
+     */
     @FXML
-    private void initialize() {
-        filesList.setCellFactory(lv -> new ListCell<>() {
-            @Override
-            protected void updateItem(FileMeta item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.getName());
-            }
-        });
-
-        filesList.getSelectionModel()
-                .selectedItemProperty()
-                .addListener((obs, oldVal, newVal) -> onFileSelected(newVal));
-
-        refreshList();
+    public void initialize() {
+        loadBalancerClient = new LoadBalancerClient();
+        updateStatus("Ready");
+        loadFileList();
     }
-
-    private void refreshList() {
-        Collection<FileMeta> files = fileService.listFilesForCurrentUser();
-        filesList.setItems(FXCollections.observableArrayList(files));
-    }
-
-    private void onFileSelected(FileMeta meta) {
-        if (meta == null) {
-            fileNameField.clear();
-            contentArea.clear();
-            return;
-        }
-
-        fileNameField.setText(meta.getName());
-        // Optional: load a preview from backend if supported
-        contentArea.setText("");
-    }
-
-    @FXML
-    private void handleCreate() {
-        String name = fileNameField.getText();
-        String content = contentArea.getText();
-
-        if (name == null || name.isBlank()) {
-            showAlert(Alert.AlertType.WARNING, "File name is required.");
-            return;
-        }
-
-        FileMeta meta = fileService.createFile(name, content);
-        refreshList();
-        filesList.getSelectionModel().select(meta);
-    }
-
-    @FXML
-    private void handleSave() {
-        FileMeta meta = filesList.getSelectionModel().getSelectedItem();
-        if (meta == null) {
-            showAlert(Alert.AlertType.WARNING, "Select a file to save.");
-            return;
-        }
-
-        String content = contentArea.getText();
-        fileService.updateFile(meta.getId(), content);
-    }
-
-    @FXML
-    private void handleDelete() {
-        FileMeta meta = filesList.getSelectionModel().getSelectedItem();
-        if (meta == null) {
-            showAlert(Alert.AlertType.WARNING, "Select a file to delete.");
-            return;
-        }
-
-        fileService.deleteFile(meta.getId());
-        refreshList();
-        fileNameField.clear();
-        contentArea.clear();
-    }
-
-    @FXML
-    private void handleShare() {
-        showAlert(Alert.AlertType.INFORMATION,
-                "File sharing / ACL UI placeholder (DB integration later).");
-    }
-
+    
+    /**
+     * Handle file upload
+     */
     @FXML
     private void handleUpload() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Upload File");
-        File chosen = chooser.showOpenDialog(filesList.getScene().getWindow());
-        if (chosen == null) {
-            return;
-        }
-
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select file to upload");
+        File selectedFile = fileChooser.showOpenDialog(null);
+        
+        if (selectedFile == null) return;
+        
         try {
-            long fileSize = chosen.length();
-
-            // Send file to Load Balancer
-            try (InputStream fis = new FileInputStream(chosen)) {
-                String fileId = LoadBalancerClient.uploadFile(fis, chosen.getName(), fileSize);
-
-                // Store metadata locally, including remote file id
-                FileMeta meta = fileService.createFile(chosen.getName(), "");
-                meta.setRemoteFileId(fileId);
-                fileService.updateFile(meta.getId(), "");
-
-                refreshList();
-                showAlert(Alert.AlertType.INFORMATION,
-                        "File uploaded successfully. File ID: " + fileId);
-            }
-        } catch (IOException e) {
-            showAlert(Alert.AlertType.ERROR,
-                    "Upload failed: " + e.getMessage());
-            e.printStackTrace();
+            updateStatus("Reading file: " + selectedFile.getName());
+            byte[] fileData = Files.readAllBytes(selectedFile.toPath());
+            
+            updateStatus("Uploading to Load Balancer...");
+            loadBalancerClient.uploadFile(selectedFile.getName(), fileData.length, fileData)
+                .thenAccept(response -> {
+                    if ("SUCCESS".equals(response.status)) {
+                        updateStatus("✓ Upload complete: " + selectedFile.getName());
+                        loadFileList();
+                    } else {
+                        updateStatus("✗ Upload failed: " + response.message);
+                    }
+                })
+                .exceptionally(ex -> {
+                    updateStatus("✗ Upload error: " + ex.getMessage());
+                    return null;
+                });
+                
+        } catch (Exception e) {
+            updateStatus("✗ Error reading file: " + e.getMessage());
         }
     }
-
+    
+    /**
+     * Handle file download
+     */
     @FXML
     private void handleDownload() {
-        FileMeta meta = filesList.getSelectionModel().getSelectedItem();
-        if (meta == null) {
-            showAlert(Alert.AlertType.WARNING, "Select a file to download.");
+        String selectedFile = fileListView.getSelectionModel().getSelectedItem();
+        if (selectedFile == null) {
+            updateStatus("Select a file first");
             return;
         }
-
-        DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Choose download folder");
-        File dir = chooser.showDialog(filesList.getScene().getWindow());
-        if (dir == null) {
-            return;
-        }
-
-        String remoteFileId = meta.getRemoteFileId();
-        if (remoteFileId == null || remoteFileId.isEmpty()) {
-            showAlert(Alert.AlertType.WARNING,
-                    "File has no remote ID. Cannot download.");
-            return;
-        }
-
+        
         try {
-            File outFile = new File(dir, meta.getName());
-            try (InputStream in = LoadBalancerClient.downloadFile(remoteFileId);
-                 OutputStream fos = new FileOutputStream(outFile)) {
-
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = in.read(buffer)) != -1) {
-                    fos.write(buffer, 0, bytesRead);
-                }
-            }
-
-            showAlert(Alert.AlertType.INFORMATION,
-                    "File downloaded successfully to: " + outFile.getAbsolutePath());
-        } catch (IOException e) {
-            showAlert(Alert.AlertType.ERROR,
-                    "Download failed: " + e.getMessage());
-            e.printStackTrace();
+            updateStatus("Downloading: " + selectedFile);
+            loadBalancerClient.downloadFile(selectedFile)
+                .thenAccept(response -> {
+                    if ("SUCCESS".equals(response.status)) {
+                        // Save file to disk
+                        Path path = Path.of(System.getProperty("user.home"), "Downloads", selectedFile);
+                        Files.write(path, response.fileData);
+                        updateStatus("✓ Downloaded: " + selectedFile);
+                    } else {
+                        updateStatus("✗ Download failed: " + response.message);
+                    }
+                })
+                .exceptionally(ex -> {
+                    updateStatus("✗ Download error: " + ex.getMessage());
+                    return null;
+                });
+                
+        } catch (Exception e) {
+            updateStatus("✗ Error: " + e.getMessage());
         }
     }
-
-    private void showAlert(Alert.AlertType type, String msg) {
-        Alert alert = new Alert(type, msg);
-        alert.showAndWait();
+    
+    /**
+     * Reload file list from server
+     */
+    private void loadFileList() {
+        loadBalancerClient.getStatus()
+            .thenAccept(status -> {
+                // TODO: Fetch actual file list from server
+                updateStatus("Active nodes: " + status.activeNodes + "/" + status.totalNodes);
+            })
+            .exceptionally(ex -> {
+                updateStatus("⚠ Offline mode - Local SQLite only");
+                return null;
+            });
+    }
+    
+    /**
+     * Update status label
+     */
+    private void updateStatus(String message) {
+        statusLabel.setText(message);
     }
 }

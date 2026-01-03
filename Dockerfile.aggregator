@@ -1,0 +1,16 @@
+FROM maven:3.8-openjdk-11 AS builder
+WORKDIR /app
+COPY . .
+RUN mvn clean package -DskipTests -pl soft40051-aggregator
+
+FROM openjdk:11-jre-slim
+WORKDIR /app
+COPY --from=builder /app/soft40051-aggregator/target/*.jar aggregator.jar
+
+ENV DB_HOST=lamp-server
+ENV DB_PORT=3306
+ENV DB_NAME=soft40051
+ENV DB_USER=root
+ENV FILE_SERVERS=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
+
+ENTRYPOINT ["java", "-jar", "aggregator.jar"]

@@ -169,6 +169,7 @@ public class FileProcessingService {
      */
     public byte[] processDownload(String fileId, String encryptionAlgo) throws ProcessingException {
         logger.info("Attempting to acquire lock for file download: {}", fileId);
+        dbLogger.info(String.format("Download initiated for file ID: %s", fileId));
         try {
             fileOperationSemaphore.acquire();
             logger.info("Lock acquired for file download: {}", fileId);
@@ -196,12 +197,16 @@ public class FileProcessingService {
                     reassembledFile.write(decryptedChunk);
                 }
                 logger.info("✓ File download completed successfully: {}", fileId);
+                dbLogger.info(String.format("File download successful for file ID: %s", fileId));
                 return reassembledFile.toByteArray();
             } catch (IOException e) {
-                throw new ProcessingException("Failed to reassemble file: " + e.getMessage(), ErrorType.PROCESSING_ERROR, e);
+                String errorMsg = "Failed to reassemble file: " + e.getMessage();
+                dbLogger.error(errorMsg);
+                throw new ProcessingException(errorMsg, ErrorType.PROCESSING_ERROR, e);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            dbLogger.error("File download was interrupted while waiting for lock for file ID: " + fileId);
             throw new ProcessingException("File download was interrupted while waiting for lock", ErrorType.PROCESSING_ERROR, e);
         } finally {
             fileOperationSemaphore.release();
@@ -266,6 +271,7 @@ public class FileProcessingService {
      */
     public void deleteFile(String fileId) throws ProcessingException {
         logger.info("Attempting to acquire lock for file deletion: {}", fileId);
+        dbLogger.info(String.format("Deletion initiated for file ID: %s", fileId));
         try {
             fileOperationSemaphore.acquire();
             logger.info("Lock acquired for file deletion: {}", fileId);
@@ -295,12 +301,15 @@ public class FileProcessingService {
                 // 4. Delete file metadata from database
                 fileRepo.deleteById(fileId);
                 logger.info("✓ File deleted successfully: {}", fileId);
+                dbLogger.info(String.format("File deletion successful for file ID: %s", fileId));
 
             } catch (ProcessingException e) {
                 logger.error("✗ Processing error during file deletion: {}", e.getMessage());
+                dbLogger.error(String.format("Processing error during file deletion for %s: %s", fileId, e.getMessage()));
                 throw e;
             } catch (Exception e) {
                 logger.error("✗ Unexpected error during file deletion: {}", e.getMessage(), e);
+                dbLogger.error(String.format("Unexpected error during file deletion for %s: %s", fileId, e.getMessage()));
                 throw new ProcessingException(
                         "Failed to delete file: " + e.getMessage(),
                         ErrorType.PROCESSING_ERROR,
@@ -309,6 +318,7 @@ public class FileProcessingService {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            dbLogger.error("File deletion was interrupted while waiting for lock for file ID: " + fileId);
             throw new ProcessingException("File deletion was interrupted while waiting for lock", ErrorType.PROCESSING_ERROR, e);
         } finally {
             fileOperationSemaphore.release();

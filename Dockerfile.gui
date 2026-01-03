@@ -1,0 +1,21 @@
+FROM openjdk:11-jdk
+
+# Install SSH server and RDP dependencies
+RUN apt-get update && apt-get install -y \
+    openssh-server \
+    xvfb \
+    x11-apps \
+    supervisor \
+    && mkdir -p /var/run/sshd
+
+WORKDIR /app
+
+COPY . .
+RUN mvn clean package -DskipTests -pl soft40051-gui
+
+# Copy SSH configuration
+COPY config/sshd_config /etc/ssh/sshd_config
+COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+EXPOSE 3389 22
+ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

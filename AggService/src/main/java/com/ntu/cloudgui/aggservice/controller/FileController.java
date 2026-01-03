@@ -164,11 +164,12 @@ public class FileController {
      */
     public void handleDownload(HttpExchange exchange) throws IOException {
         logger.info("File download request received");
+        String fileId = null;
 
         try {
             // 1. Extract and validate fileId from URL path
             String path = exchange.getRequestURI().getPath();
-            String fileId = extractFileIdFromPath(path);
+            fileId = extractFileIdFromPath(path);
 
             if (fileId == null || fileId.isEmpty()) {
                 logger.warn("Download rejected: Invalid URL path: {}", path);
@@ -182,6 +183,12 @@ public class FileController {
             logger.debug("Retrieving file metadata: {}", fileId);
             FileMetadata fileMetadata = fileProcessingService.getFile(fileId);
 
+            if (fileMetadata == null) {
+                logger.warn("Download rejected: File metadata not found for fileId: {}", fileId);
+                sendError(exchange, 404, "File not found");
+                return;
+            }
+
             logger.info("✓ File metadata retrieved. FileId: {}, Name: {}, Size: {} bytes",
                     fileId, fileMetadata.getOriginalName(), fileMetadata.getSizeBytes());
 
@@ -191,7 +198,7 @@ public class FileController {
 
             logger.info("✓ File reconstructed successfully. Size: {} bytes", fileData.length);
 
-            // 4. Stream file in response
+            // 4. Set response headers BEFORE sendResponseHeaders
             exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
             exchange.getResponseHeaders().set("Content-Disposition",
                     "attachment; filename=\"" + fileMetadata.getOriginalName() + "\"");
@@ -199,15 +206,15 @@ public class FileController {
             
             exchange.sendResponseHeaders(200, fileData.length);
 
-            OutputStream os = exchange.getResponseBody();
-            os.write(fileData);
-            os.close();
+            // 5. Stream file in response
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(fileData);
+            }
 
             logger.info("✓ File downloaded successfully: {}", fileId);
 
         } catch (ProcessingException e) {
-            logger.error("File retrieval failed for fileId: {} - {}", 
-                    extractFileIdFromPath(exchange.getRequestURI().getPath()), e.getMessage());
+            logger.error("File retrieval failed for fileId: {} - {}", fileId, e.getMessage());
             sendError(exchange, 404, "File not found or corrupted");
         } catch (Exception e) {
             logger.error("Unexpected error during download", e);
@@ -260,10 +267,17 @@ public class FileController {
             logger.debug("Fetching chunks from metadata repository");
             List<ChunkMetadata> chunks = chunkMetadataRepository.findByFileIdOrderByChunkIndex(fileId);
 
-            if (chunks.isEmpty()) {
+            if (chunks == null || chunks.isEmpty()) {
                 throw new ProcessingException(
                         "No chunks found for file: " + fileId,
                         ErrorType.FILE_NOT_FOUND
+                );
+            }
+
+            if (fileMetadata.getTotalChunks() <= 0) {
+                throw new ProcessingException(
+                        "Invalid total chunks: " + fileMetadata.getTotalChunks(),
+                        ErrorType.PROCESSING_ERROR
                 );
             }
 
@@ -275,10 +289,34 @@ public class FileController {
                 );
             }
 
+            String encryptionAlgo = fileMetadata.getEncryptionAlgo();
+            if (encryptionAlgo == null || encryptionAlgo.isEmpty()) {
+                throw new ProcessingException(
+                        "Invalid encryption algorithm",
+                        ErrorType.PROCESSING_ERROR
+                );
+            }
+
             // 2. Calculate total size and allocate buffer
             long totalSize = 0;
             for (ChunkMetadata chunk : chunks) {
-                totalSize += chunk.getOriginalSize();
+                long chunkSize = chunk.getOriginalSize();
+                if (chunkSize <= 0) {
+                    throw new ProcessingException(
+                            String.format("Invalid chunk size for chunk %d: %d",
+                                    chunk.getChunkIndex(), chunkSize),
+                            ErrorType.PROCESSING_ERROR
+                    );
+                }
+                totalSize += chunkSize;
+            }
+
+            if (totalSize > MAX_FILE_SIZE) {
+                throw new ProcessingException(
+                        String.format("Reconstructed file exceeds maximum size: %d bytes",
+                                totalSize),
+                        ErrorType.PROCESSING_ERROR
+                );
             }
 
             byte[] reassembledData = new byte[(int) totalSize];
@@ -296,11 +334,27 @@ public class FileController {
                         chunk.getRemotePath()
                 );
 
+                if (encryptedChunkData == null || encryptedChunkData.length == 0) {
+                    throw new ProcessingException(
+                            String.format("Empty encrypted data for chunk %d",
+                                    chunk.getChunkIndex()),
+                            ErrorType.PROCESSING_ERROR
+                    );
+                }
+
                 // 3b. Decrypt chunk
                 byte[] decryptedChunkData = encryptionService.decrypt(
                         encryptedChunkData,
-                        fileMetadata.getEncryptionAlgo()
+                        encryptionAlgo
                 );
+
+                if (decryptedChunkData == null || decryptedChunkData.length == 0) {
+                    throw new ProcessingException(
+                            String.format("Empty decrypted data for chunk %d",
+                                    chunk.getChunkIndex()),
+                            ErrorType.PROCESSING_ERROR
+                    );
+                }
 
                 // 3c. Validate CRC32 checksum
                 long calculatedCrc = crcValidationService.calculateCrc32(decryptedChunkData);
@@ -357,16 +411,17 @@ public class FileController {
      * @throws IOException if read fails
      */
     private byte[] readRequestBody(HttpExchange exchange) throws IOException {
-        InputStream requestBody = exchange.getRequestBody();
-        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-        byte[] buffer = new byte[BUFFER_SIZE];
-        int bytesRead;
+        try (InputStream requestBody = exchange.getRequestBody()) {
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int bytesRead;
 
-        while ((bytesRead = requestBody.read(buffer)) > 0) {
-            baos.write(buffer, 0, bytesRead);
+            while ((bytesRead = requestBody.read(buffer)) > 0) {
+                baos.write(buffer, 0, bytesRead);
+            }
+
+            return baos.toByteArray();
         }
-
-        return baos.toByteArray();
     }
 
     /**
@@ -438,9 +493,9 @@ public class FileController {
         exchange.getResponseHeaders().set("Content-Length", String.valueOf(responseBytes.length));
         exchange.sendResponseHeaders(statusCode, responseBytes.length);
 
-        OutputStream os = exchange.getResponseBody();
-        os.write(responseBytes);
-        os.close();
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(responseBytes);
+        }
     }
 
     /**
@@ -461,9 +516,9 @@ public class FileController {
         exchange.getResponseHeaders().set("Content-Length", String.valueOf(responseBytes.length));
         exchange.sendResponseHeaders(statusCode, responseBytes.length);
 
-        OutputStream os = exchange.getResponseBody();
-        os.write(responseBytes);
-        os.close();
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(responseBytes);
+        }
     }
 
     /**

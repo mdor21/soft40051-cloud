@@ -45,7 +45,6 @@ public class LoadBalancerWorker implements Runnable {
     private static final long LATENCY_MIN_MS = 1000;  // 1 second
     private static final long LATENCY_MAX_MS = 5000;  // 5 seconds
     private static final int HTTP_TIMEOUT_MS = 30000; // 30 seconds
-    private static final int HTTP_READ_BUFFER = 8192; // 8KB buffer
 
     private final RequestQueue requestQueue;
     private final NodeRegistry nodeRegistry;
@@ -218,23 +217,27 @@ public class LoadBalancerWorker implements Runnable {
             connection.setReadTimeout(HTTP_TIMEOUT_MS);
             connection.setDoOutput(true);
 
-            // Send dummy file content
-            try (OutputStream os = connection.getOutputStream()) {
-                byte[] dummyContent = new byte[(int) Math.min(request.getSizeBytes(), 1024)];
-                os.write(dummyContent);
-                os.flush();
-            }
+            try {
+                // Send dummy file content
+                try (OutputStream os = connection.getOutputStream()) {
+                    byte[] dummyContent = new byte[(int) Math.min(request.getSizeBytes(), 1024)];
+                    os.write(dummyContent);
+                    os.flush();
+                }
 
-            // Check response
-            int responseCode = connection.getResponseCode();
-            
-            if (responseCode == HttpURLConnection.HTTP_OK || 
-                responseCode == HttpURLConnection.HTTP_CREATED) {
-                System.out.printf("[LB Worker] Upload successful (HTTP %d)%n", responseCode);
-                return true;
-            } else {
-                System.err.printf("[LB Worker] Upload failed (HTTP %d)%n", responseCode);
-                return false;
+                // Check response
+                int responseCode = connection.getResponseCode();
+                
+                if (responseCode == HttpURLConnection.HTTP_OK || 
+                    responseCode == HttpURLConnection.HTTP_CREATED) {
+                    System.out.printf("[LB Worker] Upload successful (HTTP %d)%n", responseCode);
+                    return true;
+                } else {
+                    System.err.printf("[LB Worker] Upload failed (HTTP %d)%n", responseCode);
+                    return false;
+                }
+            } finally {
+                connection.disconnect();
             }
 
         } catch (Exception e) {
@@ -268,31 +271,35 @@ public class LoadBalancerWorker implements Runnable {
             connection.setConnectTimeout(HTTP_TIMEOUT_MS);
             connection.setReadTimeout(HTTP_TIMEOUT_MS);
 
-            // Check response
-            int responseCode = connection.getResponseCode();
-            
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                // Read response body
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
-                    
-                    StringBuilder content = new StringBuilder();
-                    String line;
-                    int bytesRead = 0;
-                    
-                    while ((line = reader.readLine()) != null && bytesRead < HTTP_READ_BUFFER) {
-                        content.append(line);
-                        bytesRead += line.length();
+            try {
+                // Check response
+                int responseCode = connection.getResponseCode();
+                
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    // Read response body
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+                        
+                        StringBuilder content = new StringBuilder();
+                        String line;
+                        int bytesRead = 0;
+                        
+                        while ((line = reader.readLine()) != null) {
+                            content.append(line);
+                            bytesRead += line.length();
+                        }
+                        
+                        System.out.printf("[LB Worker] Download successful (HTTP %d, %d bytes)%n",
+                            responseCode,
+                            bytesRead);
+                        return true;
                     }
-                    
-                    System.out.printf("[LB Worker] Download successful (HTTP %d, %d bytes)%n",
-                        responseCode,
-                        bytesRead);
-                    return true;
+                } else {
+                    System.err.printf("[LB Worker] Download failed (HTTP %d)%n", responseCode);
+                    return false;
                 }
-            } else {
-                System.err.printf("[LB Worker] Download failed (HTTP %d)%n", responseCode);
-                return false;
+            } finally {
+                connection.disconnect();
             }
 
         } catch (Exception e) {

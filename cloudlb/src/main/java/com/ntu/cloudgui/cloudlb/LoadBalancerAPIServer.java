@@ -3,7 +3,8 @@ package com.ntu.cloudgui.cloudlb;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpServer;
+
+import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -11,6 +12,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
@@ -79,6 +81,21 @@ public class LoadBalancerAPIServer {
     }
 
     /**
+     * Escape special characters in JSON strings.
+     * 
+     * @param input String to escape
+     * @return Escaped string safe for JSON
+     */
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
+    }
+
+    /**
      * Handler for file upload requests.
      *
      * Endpoint: POST /api/files/upload Headers: X-File-Name, X-File-Size Body:
@@ -122,13 +139,13 @@ public class LoadBalancerAPIServer {
                 requestQueue.notifyNewRequest();
 
                 // Send success response
-                String response = "{\"fileId\":\"" + fileId
-                        + "\",\"status\":\"queued\",\"fileName\":\"" + fileName
+                String response = "{\"fileId\":\"" + escapeJson(fileId)
+                        + "\",\"status\":\"queued\",\"fileName\":\"" + escapeJson(fileName)
                         + "\",\"size\":" + fileSize + "}";
 
-                exchange.getResponseHeaders().set("Content-Type", "application/json");
-                exchange.sendResponseHeaders(200, response.getBytes().length);
-                exchange.getResponseBody().write(response.getBytes());
+                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+                exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
+                exchange.getResponseBody().write(response.getBytes(StandardCharsets.UTF_8));
                 exchange.close();
 
             } catch (Exception e) {
@@ -173,6 +190,11 @@ public class LoadBalancerAPIServer {
                 // Fetch file from Aggregator
                 byte[] fileContent = fetchFileFromAggregator(fileId);
 
+                if (fileContent == null || fileContent.length == 0) {
+                    sendError(exchange, 404, "File not found");
+                    return;
+                }
+
                 // Send file content to client
                 exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
                 exchange.getResponseHeaders().set("Content-Length", String.valueOf(fileContent.length));
@@ -208,12 +230,12 @@ public class LoadBalancerAPIServer {
                 String status = "HEALTHY";
                 int queueSize = requestQueue.size();
 
-                String response = "{\"status\":\"" + status
+                String response = "{\"status\":\"" + escapeJson(status)
                         + "\",\"queue_size\":" + queueSize + "}";
 
-                exchange.getResponseHeaders().set("Content-Type", "application/json");
-                exchange.sendResponseHeaders(200, response.getBytes().length);
-                exchange.getResponseBody().write(response.getBytes());
+                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+                exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
+                exchange.getResponseBody().write(response.getBytes(StandardCharsets.UTF_8));
                 exchange.close();
 
                 System.out.println("[API] HEALTH CHECK: " + status + " | Queue: " + queueSize);
@@ -300,10 +322,10 @@ public class LoadBalancerAPIServer {
      */
     private void sendError(HttpExchange exchange, int statusCode, String message) {
         try {
-            String errorJson = "{\"error\":\"" + message + "\"}";
-            exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(statusCode, errorJson.getBytes().length);
-            exchange.getResponseBody().write(errorJson.getBytes());
+            String errorJson = "{\"error\":\"" + escapeJson(message) + "\"}";
+            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+            exchange.sendResponseHeaders(statusCode, errorJson.getBytes(StandardCharsets.UTF_8).length);
+            exchange.getResponseBody().write(errorJson.getBytes(StandardCharsets.UTF_8));
             exchange.close();
 
             System.err.println("[API] HTTP " + statusCode + ": " + message);
@@ -325,5 +347,32 @@ public class LoadBalancerAPIServer {
             System.err.println("[API] Invalid file size format: " + fileSizeStr);
             return 0;
         }
+    }
+}
+
+// LoadBalancerAPIServer.java - Missing!
+@RestController
+@RequestMapping("/api")
+public class LoadBalancerController {
+    
+    @PostMapping("/upload")
+    public ResponseEntity<UploadResponse> handleUpload(
+        @RequestParam String filename,
+        @RequestBody byte[] fileData) {
+        // Route to aggregator based on scheduler
+        // Apply 1.0-5.0s latency
+        // Return response
+    }
+    
+    @PostMapping("/download")
+    public ResponseEntity<byte[]> handleDownload(
+        @RequestParam String filename) {
+        // Route to aggregator
+        // Return reassembled file
+    }
+    
+    @GetMapping("/status")
+    public ResponseEntity<StatusResponse> getStatus() {
+        // Return node health, queue size, scheduler type
     }
 }
