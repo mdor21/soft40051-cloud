@@ -8,6 +8,7 @@ import javafx.stage.FileChooser;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.io.IOException;
 
 /**
  * Files Controller - File Upload/Download UI
@@ -97,10 +98,14 @@ public class FilesController {
             loadBalancerClient.downloadFile(selectedFile)
                 .thenAccept(response -> {
                     if ("SUCCESS".equals(response.status)) {
-                        // Save file to disk
-                        Path path = Path.of(System.getProperty("user.home"), "Downloads", selectedFile);
-                        Files.write(path, response.fileData);
-                        updateStatus("✓ Downloaded: " + selectedFile);
+                        try {
+                            // Save file to disk
+                            Path path = Path.of(System.getProperty("user.home"), "Downloads", selectedFile);
+                            Files.write(path, response.fileData);
+                            updateStatus("✓ Downloaded: " + selectedFile);
+                        } catch (IOException e) {
+                            updateStatus("✗ File write error: " + e.getMessage());
+                        }
                     } else {
                         updateStatus("✗ Download failed: " + response.message);
                     }
