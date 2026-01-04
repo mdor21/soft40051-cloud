@@ -76,14 +76,12 @@ public class FileServerSSHManager {
             ChannelSftp sftp = (ChannelSftp) session.openChannel("sftp");
             sftp.connect(CONNECTION_TIMEOUT_MS);
             
-            // Create remote file with metadata
             String remoteFilename = String.format("/data/chunks/%s.chunk", chunkId);
-            sftp.put(new ByteArrayInputStream(chunkData), remoteFilename);
+            sftp.put(new java.io.ByteArrayInputStream(chunkData), remoteFilename);
             
-            // Store checksum in metadata file
             String metadataFilename = String.format("/data/chunks/%s.metadata", chunkId);
             String metadata = String.format("checksum=%s\nsize=%d\n", checksum, chunkData.length);
-            sftp.put(new ByteArrayInputStream(metadata.getBytes()), metadataFilename);
+            sftp.put(new java.io.ByteArrayInputStream(metadata.getBytes()), metadataFilename);
             
             sftp.disconnect();
             
@@ -172,14 +170,5 @@ public class FileServerSSHManager {
         }
         activeSessions.clear();
         log.info("All SSH sessions closed");
-    }
-    
-    /**
-     * Helper class for byte array streams
-     */
-    private static class ByteArrayInputStream extends java.io.ByteArrayInputStream {
-        ByteArrayInputStream(byte[] buf) {
-            super(buf);
-        }
     }
 }

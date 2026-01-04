@@ -74,26 +74,31 @@ public class FileChunkingService {
             // Calculate CRC32 of plaintext (for integrity verification)
             String plaintextCRC32 = calculateCRC32(plainChunkData);
             
-            // Encrypt the chunk
-            byte[] encryptedChunkData = encryptionService.encrypt(plainChunkData);
-            
-            FileChunk chunk = new FileChunk();
-            chunk.setChunkId(UUID.randomUUID().toString());
-            chunk.setFilename(filename);
-            chunk.setChunkIndex(i);
-            chunk.setTotalChunks(totalChunks);
-            chunk.setData(encryptedChunkData);  // Store encrypted data
-            chunk.setSize(encryptedChunkData.length);
-            chunk.setPlaintextSize(plainChunkData.length);
-            chunk.setChecksum(plaintextCRC32);  // CRC32 of plaintext
-            chunk.setEncrypted(true);  // ✅ Mark as encrypted
-            chunk.setEncryptionAlgorithm("AES-256-GCM");
-            
-            chunks.add(chunk);
-            log.info(
-                "Created chunk {}/{} for file {} (plaintext: {}B, encrypted: {}B, CRC32: {})",
-                i + 1, totalChunks, filename, plainChunkData.length, 
-                encryptedChunkData.length, plaintextCRC32);
+            try {
+                // Encrypt the chunk
+                byte[] encryptedChunkData = encryptionService.encrypt(plainChunkData);
+                
+                FileChunk chunk = new FileChunk();
+                chunk.setChunkId(UUID.randomUUID().toString());
+                chunk.setFilename(filename);
+                chunk.setChunkIndex(i);
+                chunk.setTotalChunks(totalChunks);
+                chunk.setData(encryptedChunkData);  // Store encrypted data
+                chunk.setSize(encryptedChunkData.length);
+                chunk.setPlaintextSize(plainChunkData.length);
+                chunk.setChecksum(plaintextCRC32);  // CRC32 of plaintext
+                chunk.setEncrypted(true);  // ✅ Mark as encrypted
+                chunk.setEncryptionAlgorithm("AES-256-GCM");
+                
+                chunks.add(chunk);
+                log.info(
+                    "Created chunk {}/{} for file {} (plaintext: {}B, encrypted: {}B, CRC32: {})",
+                    i + 1, totalChunks, filename, plainChunkData.length, 
+                    encryptedChunkData.length, plaintextCRC32);
+            } catch (Exception e) {
+                log.error("Failed to encrypt chunk {}", i, e);
+                throw new RuntimeException("Encryption failed for chunk " + i, e);
+            }
         }
         
         return chunks;

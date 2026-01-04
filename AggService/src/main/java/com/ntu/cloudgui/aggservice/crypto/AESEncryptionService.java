@@ -34,6 +34,24 @@ public class AESEncryptionService {
     private static final int GCM_TAG_LENGTH = 128;
     private static final int GCM_IV_LENGTH = 96;
     private static final int AES_KEY_SIZE = 256;
+    
+    private String defaultEncryptionKey;
+    
+    public AESEncryptionService() throws Exception {
+        // Generate a default encryption key on service initialization
+        this.defaultEncryptionKey = generateKey();
+        log.info("AESEncryptionService initialized with encryption key");
+    }
+    
+    /**
+     * Generate a new AES-256 encryption key
+     */
+    public String generateKey() throws Exception {
+        KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+        keyGen.init(AES_KEY_SIZE);
+        SecretKey key = keyGen.generateKey();
+        return Base64.getEncoder().encodeToString(key.getEncoded());
+    }
 
     public String encrypt(String plaintext, String key) throws Exception {
         SecretKey secretKey = new SecretKeySpec(Base64.getDecoder().decode(key), 0, 32, "AES");
@@ -62,5 +80,57 @@ public class AESEncryptionService {
         GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
         return new String(cipher.doFinal(ciphertextBytes));
+    }
+
+    /**
+     * Encrypt byte array using default key
+     */
+    public byte[] encrypt(byte[] plaintext) throws Exception {
+        return encrypt(plaintext, defaultEncryptionKey);
+    }
+
+    /**
+     * Encrypt byte array with specified key
+     */
+    public byte[] encrypt(byte[] plaintext, String key) throws Exception {
+        SecretKey secretKey = new SecretKeySpec(Base64.getDecoder().decode(key), 0, 32, "AES");
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        SecureRandom random = new SecureRandom();
+        byte[] iv = new byte[GCM_IV_LENGTH / 8];
+        random.nextBytes(iv);
+        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec);
+        byte[] ciphertext = cipher.doFinal(plaintext);
+        ByteBuffer buffer = ByteBuffer.allocate(iv.length + ciphertext.length);
+        buffer.put(iv);
+        buffer.put(ciphertext);
+        return buffer.array();
+    }
+
+    /**
+     * Decrypt byte array using default key
+     */
+    public byte[] decrypt(byte[] ciphertext) throws Exception {
+        return decrypt(ciphertext, defaultEncryptionKey);
+    }
+
+    /**
+     * Decrypt byte array with specified key
+     */
+    public byte[] decrypt(byte[] ciphertext, String key) throws Exception {
+        SecretKey secretKey = new SecretKeySpec(Base64.getDecoder().decode(key), 0, 32, "AES");
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        ByteBuffer buffer = ByteBuffer.wrap(ciphertext);
+        byte[] iv = new byte[GCM_IV_LENGTH / 8];
+        buffer.get(iv);
+        byte[] ciphertextBytes = new byte[buffer.remaining()];
+        buffer.get(ciphertextBytes);
+        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
+        return cipher.doFinal(ciphertextBytes);
+    }
+    
+    public String getDefaultKey() {
+        return defaultEncryptionKey;
     }
 }
