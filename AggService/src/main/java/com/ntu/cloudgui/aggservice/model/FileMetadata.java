@@ -1,14 +1,18 @@
 package com.ntu.cloudgui.aggservice.model;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "file_metadata")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
+@AllArgsConstructor
 public class FileMetadata {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
