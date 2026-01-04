@@ -1,6 +1,9 @@
 package com.ntu.cloudgui.aggservice.crypto;
 
-import lombok.extern.slf4j.Slf4j;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Cipher;
@@ -28,19 +31,27 @@ import java.util.Base64;
  * - Integrity: GCM mode detects any data modification
  * - Authentication
  */
-@Slf4j
 @Service
 public class AESEncryptionService {
+    private static final Logger log = LoggerFactory.getLogger(AESEncryptionService.class);
     private static final int GCM_TAG_LENGTH = 128;
     private static final int GCM_IV_LENGTH = 96;
     private static final int AES_KEY_SIZE = 256;
     
+    @Value("${aggregator.security.aes-key}")
     private String defaultEncryptionKey;
     
-    public AESEncryptionService() throws Exception {
-        // Generate a default encryption key on service initialization
-        this.defaultEncryptionKey = generateKey();
-        log.info("AESEncryptionService initialized with encryption key");
+    public AESEncryptionService() {
+        // Key will be injected by Spring after construction.
+    }
+
+    @PostConstruct
+    private void init() {
+        if (defaultEncryptionKey == null || defaultEncryptionKey.isBlank() || "YOUR_GENERATED_AES_256_KEY_HERE".equals(defaultEncryptionKey)) {
+            log.error("CRITICAL: AES encryption key is not configured. Please set 'aggregator.security.aes-key' in application.properties.");
+            throw new IllegalStateException("AES encryption key is not configured.");
+        }
+        log.info("AESEncryptionService initialized with a configured encryption key.");
     }
     
     /**
@@ -51,35 +62,6 @@ public class AESEncryptionService {
         keyGen.init(AES_KEY_SIZE);
         SecretKey key = keyGen.generateKey();
         return Base64.getEncoder().encodeToString(key.getEncoded());
-    }
-
-    public String encrypt(String plaintext, String key) throws Exception {
-        SecretKey secretKey = new SecretKeySpec(Base64.getDecoder().decode(key), 0, 32, "AES");
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        SecureRandom random = new SecureRandom();
-        byte[] iv = new byte[GCM_IV_LENGTH / 8];
-        random.nextBytes(iv);
-        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec);
-        byte[] ciphertext = cipher.doFinal(plaintext.getBytes());
-        ByteBuffer buffer = ByteBuffer.allocate(iv.length + ciphertext.length);
-        buffer.put(iv);
-        buffer.put(ciphertext);
-        return Base64.getEncoder().encodeToString(buffer.array());
-    }
-
-    public String decrypt(String ciphertext, String key) throws Exception {
-        SecretKey secretKey = new SecretKeySpec(Base64.getDecoder().decode(key), 0, 32, "AES");
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        byte[] decoded = Base64.getDecoder().decode(ciphertext);
-        ByteBuffer buffer = ByteBuffer.wrap(decoded);
-        byte[] iv = new byte[GCM_IV_LENGTH / 8];
-        buffer.get(iv);
-        byte[] ciphertextBytes = new byte[buffer.remaining()];
-        buffer.get(ciphertextBytes);
-        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
-        return new String(cipher.doFinal(ciphertextBytes));
     }
 
     /**

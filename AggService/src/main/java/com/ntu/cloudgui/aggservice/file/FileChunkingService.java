@@ -1,7 +1,8 @@
 package com.ntu.cloudgui.aggservice.file;
 
 import com.ntu.cloudgui.aggservice.crypto.AESEncryptionService;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -35,10 +36,10 @@ import java.util.zip.CRC32;
  *     ↓ (SFTP over SSH)
  * File Servers (/data/chunks/)
  */
-@Slf4j
 @Service
 public class FileChunkingService {
     
+    private static final Logger log = LoggerFactory.getLogger(FileChunkingService.class);
     private static final int DEFAULT_CHUNK_SIZE = 1024 * 1024; // 1MB
     private static final int MAX_CHUNKS = 100; // Max 100 chunks per file
     

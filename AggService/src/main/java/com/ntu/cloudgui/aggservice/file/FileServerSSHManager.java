@@ -1,7 +1,9 @@
 package com.ntu.cloudgui.aggservice.file;
 
 import com.jcraft.jsch.*;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
@@ -25,14 +27,18 @@ import java.util.*;
  * - soft40051-files-container3 (file-server-3:22)
  * - soft40051-files-container4 (file-server-4:22)
  */
-@Slf4j
 @Service
 public class FileServerSSHManager {
     
+    private static final Logger log = LoggerFactory.getLogger(FileServerSSHManager.class);
     private static final int SSH_PORT = 22;
     private static final int CONNECTION_TIMEOUT_MS = 10000;
-    private static final String SSH_USER = "fileserver";
-    private static final String SSH_PASSWORD = "secure123"; // TODO: Use env vars / secrets
+
+    @Value("${aggregator.fileserver.ssh.user}")
+    private String sshUser;
+
+    @Value("${aggregator.fileserver.ssh.password}")
+    private String sshPassword;
     
     private final JSch jsch;
     private final Map<String, Session> activeSessions = Collections.synchronizedMap(new HashMap<>());
@@ -147,8 +153,8 @@ public class FileServerSSHManager {
         }
         
         // Create new session
-        Session session = jsch.getSession(SSH_USER, hostname, SSH_PORT);
-        session.setPassword(SSH_PASSWORD);
+        Session session = jsch.getSession(sshUser, hostname, SSH_PORT);
+        session.setPassword(sshPassword);
         session.setConfig("StrictHostKeyChecking", "no");
         session.setConfig("PreferredAuthentications", "password");
         session.connect(CONNECTION_TIMEOUT_MS);

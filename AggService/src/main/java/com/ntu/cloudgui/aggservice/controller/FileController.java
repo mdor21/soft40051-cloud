@@ -486,7 +486,7 @@ public class FileController {
      */
     private void sendSuccess(HttpExchange exchange, int statusCode, ApiResponse response)
             throws IOException {
-        String responseJson = response.toJson();
+        String responseJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response);
         byte[] responseBytes = responseJson.getBytes(StandardCharsets.UTF_8);
 
         exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -509,7 +509,7 @@ public class FileController {
     private void sendError(HttpExchange exchange, int statusCode, String message)
             throws IOException {
         ApiResponse response = new ApiResponse(false, message, null);
-        String responseJson = response.toJson();
+        String responseJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response);
         byte[] responseBytes = responseJson.getBytes(StandardCharsets.UTF_8);
 
         exchange.getResponseHeaders().set("Content-Type", "application/json");
