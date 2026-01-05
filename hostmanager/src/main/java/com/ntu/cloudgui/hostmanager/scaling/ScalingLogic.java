@@ -1,11 +1,16 @@
 package com.ntu.cloudgui.hostmanager.scaling;
 
+import com.ntu.cloudgui.hostmanager.container.ContainerInfo;
 import com.ntu.cloudgui.hostmanager.container.ContainerManager;
 import com.ntu.cloudgui.hostmanager.docker.DockerCommandExecutor;
 import com.ntu.cloudgui.hostmanager.docker.ProcessResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Comparator;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
@@ -34,37 +39,70 @@ public class ScalingLogic {
 
     /**
      * Handles a scale-up request.
+     * Finds the next available container numbers and creates them.
      *
      * @param count The number of containers to add.
      */
     public void handleScaleUp(int count) {
         logger.info("Handling scale-up request for {} containers", count);
-        IntStream.range(1, count + 1)
+        Set<String> activeContainers = containerManager.getAllContainers().stream()
+                .map(ContainerInfo::getContainerName)
+                .collect(Collectors.toSet());
+        long currentSize = activeContainers.size();
+
+        if (currentSize >= MAX_CONTAINERS) {
+            logger.warn("Cannot scale up, already at maximum capacity of {}", MAX_CONTAINERS);
+            return;
+        }
+
+        long spaceAvailable = MAX_CONTAINERS - currentSize;
+        long containersToStart = Math.min(count, spaceAvailable);
+
+        IntStream.rangeClosed(1, MAX_CONTAINERS)
                 .mapToObj(i -> CONTAINER_BASE_NAME + i)
-                .filter(containerName -> !dockerExecutor.containerExists(containerName))
+                .filter(name -> !activeContainers.contains(name))
+                .limit(containersToStart)
                 .forEach(this::startContainer);
     }
 
     /**
      * Handles a scale-down request.
+     * Removes the highest-numbered containers first.
      *
      * @param count The number of containers to remove.
      */
     public void handleScaleDown(int count) {
         logger.info("Handling scale-down request for {} containers", count);
-        IntStream.range(1, count + 1)
-                .mapToObj(i -> CONTAINER_BASE_NAME + i)
-                .filter(dockerExecutor::containerExists)
-                .forEach(this::stopContainer);
+        if (count <= 0) return;
+
+        List<String> containersToStop = containerManager.getAllContainers().stream()
+                .map(ContainerInfo::getContainerName)
+                .sorted(Comparator.comparingInt(this::getContainerNumber).reversed())
+                .limit(count)
+                .collect(Collectors.toList());
+
+        if (containersToStop.isEmpty()) {
+            logger.info("No containers to scale down.");
+            return;
+        }
+
+        logger.info("Identified containers to stop: {}", containersToStop);
+        containersToStop.forEach(this::stopContainer);
     }
 
     private void startContainer(String containerName) {
-        int containerNumber = Integer.parseInt(containerName.substring(CONTAINER_BASE_NAME.length()));
-        int port = MIN_PORT + containerNumber - 1;
-        ProcessResult result = dockerExecutor.runContainer(containerName, port, IMAGE_NAME);
-        if (result.getExitCode() == 0) {
-            containerManager.addContainer(containerName);
-            eventPublisher.publishScalingEvent("up", containerName);
+        try {
+            int containerNumber = getContainerNumber(containerName);
+            int port = MIN_PORT + containerNumber - 1;
+            ProcessResult result = dockerExecutor.runContainer(containerName, port, IMAGE_NAME);
+            if (result.getExitCode() == 0) {
+                containerManager.addContainer(containerName);
+                if (eventPublisher != null) {
+                    eventPublisher.publishScalingEvent("up", containerName);
+                }
+            }
+        } catch (NumberFormatException e) {
+            logger.error("Could not parse container number from name: {}", containerName, e);
         }
     }
 
@@ -72,7 +110,13 @@ public class ScalingLogic {
         ProcessResult result = dockerExecutor.stopContainer(containerName);
         if (result.getExitCode() == 0) {
             containerManager.removeContainer(containerName);
-            eventPublisher.publishScalingEvent("down", containerName);
+            if (eventPublisher != null) {
+                eventPublisher.publishScalingEvent("down", containerName);
+            }
         }
+    }
+
+    private int getContainerNumber(String containerName) {
+        return Integer.parseInt(containerName.substring(CONTAINER_BASE_NAME.length()));
     }
 }

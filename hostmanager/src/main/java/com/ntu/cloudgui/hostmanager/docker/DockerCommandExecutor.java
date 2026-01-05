@@ -49,6 +49,19 @@ public class DockerCommandExecutor {
             return new ProcessResult(1, "", e.getMessage());
         }
     }
+
+    /**
+     * List running containers matching a base name
+     */
+    public ProcessResult listContainersByName(String baseName) {
+        try {
+            List<String> command = Arrays.asList("docker", "ps", "-a", "--filter", "name=" + baseName, "--format", "{{.Names}}");
+            return executeWithTimeout(command, 10);
+        } catch (Exception e) {
+            logger.error("Error listing containers by name", e);
+            return new ProcessResult(1, "", e.getMessage());
+        }
+    }
     
     /**
      * Stop a running container
