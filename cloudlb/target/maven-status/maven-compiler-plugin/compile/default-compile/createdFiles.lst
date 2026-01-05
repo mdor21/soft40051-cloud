@@ -1,4 +1,5 @@
 com/ntu/cloudgui/cloudlb/core/StorageNode.class
+com/ntu/cloudgui/cloudlb/core/RoundRobinDistributionScheduler.class
 com/ntu/cloudgui/cloudlb/LoadBalancerAPIServer.class
 com/ntu/cloudgui/cloudlb/LoadBalancerAPIServer$HealthHandler.class
 com/ntu/cloudgui/cloudlb/Request.class
@@ -10,7 +11,6 @@ com/ntu/cloudgui/cloudlb/LoadBalancerClient$HealthStatus.class
 com/ntu/cloudgui/cloudlb/core/HealthChecker.class
 com/ntu/cloudgui/cloudlb/LoadBalancerAPIServer$UploadHandler.class
 com/ntu/cloudgui/cloudlb/core/SjnScheduler.class
-com/ntu/cloudgui/cloudlb/core/FcfsScheduler.class
 com/ntu/cloudgui/cloudlb/RequestQueue.class
 com/ntu/cloudgui/cloudlb/ScalingService.class
 com/ntu/cloudgui/cloudlb/core/NodeRegistry.class

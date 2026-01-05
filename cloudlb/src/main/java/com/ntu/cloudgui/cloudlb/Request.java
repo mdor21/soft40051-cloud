@@ -2,16 +2,16 @@ package com.ntu.cloudgui.cloudlb;
 
 /**
  * Request Class - Represents a file operation request
- * 
+ *
  * Encapsulates file upload/download requests with metadata:
  * - Unique file identifier
  * - Operation type (UPLOAD or DOWNLOAD)
  * - File size in bytes
  * - Creation timestamp
  * - Priority for scheduling
- * 
+ *
  * Thread Safety: Immutable (thread-safe)
- * 
+ *
  * Usage:
  * ```
  * Request uploadReq = new Request(fileId, Request.Type.UPLOAD, fileSizeBytes, priority);
@@ -22,7 +22,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Request Type Enumeration
-     * 
+     *
      * UPLOAD: File upload operation (client → load balancer → storage)
      * DOWNLOAD: File download operation (storage → load balancer → client)
      */
@@ -50,7 +50,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Create a new file operation request.
-     * 
+     *
      * @param id Unique file identifier (UUID recommended)
      * @param type Request type (UPLOAD or DOWNLOAD)
      * @param sizeBytes File size in bytes
@@ -66,7 +66,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Get the unique request/file identifier.
-     * 
+     *
      * @return File ID
      */
     public String getId() {
@@ -75,7 +75,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Get the type of request.
-     * 
+     *
      * @return UPLOAD or DOWNLOAD
      */
     public Type getType() {
@@ -84,7 +84,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Get the file size in bytes.
-     * 
+     *
      * @return File size (bytes)
      */
     public long getSizeBytes() {
@@ -94,7 +94,7 @@ public class Request implements Comparable<Request> {
     /**
      * Get the file size in megabytes.
      * Convenience method for logging.
-     * 
+     *
      * @return File size (MB)
      */
     public double getSizeMB() {
@@ -103,7 +103,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Get the request creation timestamp.
-     * 
+     *
      * @return Milliseconds since epoch when request was created
      */
     public long getCreatedTimeMs() {
@@ -112,7 +112,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Get the time elapsed since request creation.
-     * 
+     *
      * @return Milliseconds elapsed
      */
     public long getAgeMs() {
@@ -121,10 +121,10 @@ public class Request implements Comparable<Request> {
 
     /**
      * Get the request priority.
-     * 
+     *
      * Used by schedulers for request prioritization (aging).
      * Lower value = higher priority.
-     * 
+     *
      * @return Priority level
      */
     public int getPriority() {
@@ -133,7 +133,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Check if this is an upload request.
-     * 
+     *
      * @return true if UPLOAD, false otherwise
      */
     public boolean isUpload() {
@@ -142,7 +142,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Check if this is a download request.
-     * 
+     *
      * @return true if DOWNLOAD, false otherwise
      */
     public boolean isDownload() {
@@ -152,7 +152,7 @@ public class Request implements Comparable<Request> {
     /**
      * Get a string representation of the request.
      * Useful for logging and debugging.
-     * 
+     *
      * @return Formatted request description
      */
     @Override
@@ -166,7 +166,7 @@ public class Request implements Comparable<Request> {
     /**
      * Check equality based on request ID.
      * Two requests with same ID are considered equal.
-     * 
+     *
      * @param obj Object to compare
      * @return true if IDs match
      */
@@ -180,7 +180,7 @@ public class Request implements Comparable<Request> {
 
     /**
      * Get hash code based on request ID.
-     * 
+     *
      * @return Hash code
      */
     @Override
@@ -223,7 +223,8 @@ public class Request implements Comparable<Request> {
         long agingIntervals = ageMs / AGING_THRESHOLD_MS;
         double agingFactor = Math.pow(AGING_PRIORITY_BOOST, agingIntervals);
 
-        return baseScore / agingFactor;
+        // Add a small epsilon to the factor to avoid division by zero for new requests
+        return baseScore / (agingFactor + 1e-9);
     }
 
     public long getCreationTime() {

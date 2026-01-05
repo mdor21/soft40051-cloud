@@ -9,12 +9,19 @@ import java.time.format.DateTimeFormatter;
 /**
  * SjnScheduler - Shortest Job Next Scheduler
  *
- * This scheduler works in conjunction with the RequestQueue, which is responsible
- * for prioritizing requests based on job size (smaller jobs first) and age.
+ * This scheduler implements a simple round-robin distribution strategy.
+ * The actual "Shortest-Job-Next" (SJN) logic is not handled here but is
+ * enforced by the `RequestQueue`.
  *
- * This scheduler's role is simply to select the next available healthy node
- * in a round-robin fashion. The "Shortest-Job-Next" logic is enforced by the
- * queue, which provides the highest-priority (i.e., smallest) job to the worker.
+ * DESIGN RATIONALE:
+ * The `RequestQueue` is a `PriorityQueue` that sorts incoming requests
+ * based on their size and age. This ensures that the `LoadBalancerWorker`
+ * always receives the highest-priority request (the "shortest job") first.
+ *
+ * Consequently, the role of the `SjnScheduler` is not to re-order jobs, but
+ * to distribute these already-prioritized jobs evenly across the available
+ * healthy nodes. A round-robin approach is the most effective way to achieve
+ * this distribution.
  *
  * Thread-safe: uses AtomicInteger for safe round-robin index updates.
  */
