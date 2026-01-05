@@ -52,7 +52,7 @@ public class LoadBalancerClient {
                 request.addProperty("size", fileSize);
                 request.addProperty("checksum", calculateCRC32(fileData));
                 
-                String response = sendRequest(request.toString());
+                String response = sendRequestWithData(request.toString(), fileData);
                 return gson.fromJson(response, UploadResponse.class);
                 
             } catch (Exception e) {
@@ -135,6 +135,38 @@ public class LoadBalancerClient {
             throw new IOException("Failed to communicate with Load Balancer (" + LB_HOST + ":" + LB_PORT + ")", e);
         }
     }
+
+    private String sendRequestWithData(String requestJson, byte[] data) throws IOException {
+        try (Socket sock = new Socket(LB_HOST, LB_PORT)) {
+            sock.setSoTimeout(SOCKET_TIMEOUT_MS);
+
+            // Send request
+            OutputStream out = sock.getOutputStream();
+            out.write(requestJson.getBytes(StandardCharsets.UTF_8));
+            out.write('\n');
+
+            // Send binary data
+            if (data != null) {
+                out.write(data);
+            }
+            out.flush();
+            sock.shutdownOutput(); // Signal end of sending
+
+            // Receive response
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8));
+            StringBuilder response = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+
+            return response.toString();
+
+        } catch (IOException e) {
+            throw new IOException("Failed to communicate with Load Balancer (" + LB_HOST + ":" + LB_PORT + ")", e);
+        }
+    }
     
     /**
      * Calculate CRC32 checksum for file data
@@ -171,5 +203,108 @@ public class LoadBalancerClient {
         public int totalNodes;
         public int queueSize;
         public String schedulerType;
+    }
+
+    public static class FileMetadata {
+        public String filename;
+        public long size;
+        public long createdAt;
+        public long updatedAt;
+    }
+
+    public static class ListFilesResponse {
+        public String status;
+        public String message;
+        public java.util.List<FileMetadata> files;
+    }
+
+    public static class DeleteResponse {
+        public String status;
+        public String message;
+    }
+
+    public static class ShareResponse {
+        public String status;
+        public String message;
+    }
+
+    public CompletableFuture<ListFilesResponse> listFiles(String username) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                JsonObject request = new JsonObject();
+                request.addProperty("action", "LIST_FILES");
+                request.addProperty("username", username);
+                String response = sendRequest(request.toString());
+                return gson.fromJson(response, ListFilesResponse.class);
+            } catch (Exception e) {
+                throw new RuntimeException("List files failed: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    public CompletableFuture<UploadResponse> createFile(String filename, String username) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                JsonObject request = new JsonObject();
+                request.addProperty("action", "CREATE_FILE");
+                request.addProperty("filename", filename);
+                request.addProperty("username", username);
+                String response = sendRequest(request.toString());
+                return gson.fromJson(response, UploadResponse.class);
+            } catch (Exception e) {
+                throw new RuntimeException("Create file failed: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    // TODO: This method, like uploadFile, does not actually transmit the file data.
+    // The communication protocol needs to be updated to handle streaming binary data
+    // after the initial JSON request.
+    public CompletableFuture<UploadResponse> updateFile(String filename, long fileSize, byte[] fileData) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                JsonObject request = new JsonObject();
+                request.addProperty("action", "UPDATE_FILE");
+                request.addProperty("filename", filename);
+                request.addProperty("size", fileSize);
+                request.addProperty("checksum", calculateCRC32(fileData));
+                String response = sendRequestWithData(request.toString(), fileData);
+                return gson.fromJson(response, UploadResponse.class);
+            } catch (Exception e) {
+                throw new RuntimeException("Update failed: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    public CompletableFuture<DeleteResponse> deleteFile(String filename, String username) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                JsonObject request = new JsonObject();
+                request.addProperty("action", "DELETE_FILE");
+                request.addProperty("filename", filename);
+                request.addProperty("username", username);
+                String response = sendRequest(request.toString());
+                return gson.fromJson(response, DeleteResponse.class);
+            } catch (Exception e) {
+                throw new RuntimeException("Delete failed: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    public CompletableFuture<ShareResponse> shareFile(String filename, String ownerUsername, String targetUsername, String permission) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                JsonObject request = new JsonObject();
+                request.addProperty("action", "SHARE_FILE");
+                request.addProperty("filename", filename);
+                request.addProperty("owner_username", ownerUsername);
+                request.addProperty("target_username", targetUsername);
+                request.addProperty("permission", permission);
+                String response = sendRequest(request.toString());
+                return gson.fromJson(response, ShareResponse.class);
+            } catch (Exception e) {
+                throw new RuntimeException("Share failed: " + e.getMessage(), e);
+            }
+        });
     }
 }
