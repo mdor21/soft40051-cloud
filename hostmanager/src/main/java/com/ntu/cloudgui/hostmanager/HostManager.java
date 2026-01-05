@@ -2,6 +2,7 @@ package com.ntu.cloudgui.hostmanager;
 
 import com.ntu.cloudgui.hostmanager.container.ContainerManager;
 import com.ntu.cloudgui.hostmanager.docker.DockerCommandExecutor;
+import com.ntu.cloudgui.hostmanager.docker.ProcessResult;
 import com.ntu.cloudgui.hostmanager.health.HealthCheckManager;
 import com.ntu.cloudgui.hostmanager.model.ScalingRequest;
 import com.ntu.cloudgui.hostmanager.mqtt.MqttConnectionManager;
@@ -147,6 +148,9 @@ public class HostManager {
         try {
             logger.info("========== Starting HostManager ==========");
             
+            // Synchronize with existing containers
+            synchronizeContainerState();
+
             // Subscribe to MQTT topics for scaling requests
             subscribeToScalingRequests();
             
@@ -165,6 +169,25 @@ public class HostManager {
             logger.error("Failed to start HostManager", e);
             stop();
             throw new RuntimeException("HostManager startup failed", e);
+        }
+    }
+
+    /**
+     * Synchronize with existing containers on startup
+     */
+    private void synchronizeContainerState() {
+        logger.info("Synchronizing container state...");
+        ProcessResult result = dockerExecutor.listContainersByName("soft40051-files-container");
+        if (result.getExitCode() == 0) {
+            String[] containerNames = result.getOutput().split("\n");
+            for (String name : containerNames) {
+                if (!name.trim().isEmpty()) {
+                    containerManager.addContainer(name.trim());
+                    logger.info("Found existing container: {}", name.trim());
+                }
+            }
+        } else {
+            logger.error("Failed to list existing containers: {}", result.getError());
         }
     }
     
