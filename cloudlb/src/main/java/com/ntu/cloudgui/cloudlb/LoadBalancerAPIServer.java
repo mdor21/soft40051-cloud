@@ -4,7 +4,6 @@ import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
-import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -350,29 +349,3 @@ public class LoadBalancerAPIServer {
     }
 }
 
-// LoadBalancerAPIServer.java - Missing!
-@RestController
-@RequestMapping("/api")
-public class LoadBalancerController {
-    
-    @PostMapping("/upload")
-    public ResponseEntity<UploadResponse> handleUpload(
-        @RequestParam String filename,
-        @RequestBody byte[] fileData) {
-        // Route to aggregator based on scheduler
-        // Apply 1.0-5.0s latency
-        // Return response
-    }
-    
-    @PostMapping("/download")
-    public ResponseEntity<byte[]> handleDownload(
-        @RequestParam String filename) {
-        // Route to aggregator
-        // Return reassembled file
-    }
-    
-    @GetMapping("/status")
-    public ResponseEntity<StatusResponse> getStatus() {
-        // Return node health, queue size, scheduler type
-    }
-}
