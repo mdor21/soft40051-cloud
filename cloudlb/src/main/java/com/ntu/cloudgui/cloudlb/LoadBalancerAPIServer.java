@@ -3,6 +3,9 @@ package com.ntu.cloudgui.cloudlb;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import com.ntu.cloudgui.cloudlb.core.NodeRegistry;
+import com.ntu.cloudgui.cloudlb.core.Scheduler;
+import com.ntu.cloudgui.cloudlb.core.StorageNode;
 
 
 import java.io.IOException;
@@ -12,6 +15,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -31,6 +35,8 @@ import java.util.UUID;
 public class LoadBalancerAPIServer {
 
     private final RequestQueue requestQueue;
+    private final NodeRegistry nodeRegistry;
+    private final Scheduler scheduler;
     private final int port;
     private HttpServer httpServer;
     private final HttpClient httpClient;
@@ -41,8 +47,10 @@ public class LoadBalancerAPIServer {
      * @param requestQueue RequestQueue to queue file operations
      * @param port HTTP port to listen on (typically 8080)
      */
-    public LoadBalancerAPIServer(RequestQueue requestQueue, int port) {
+    public LoadBalancerAPIServer(RequestQueue requestQueue, NodeRegistry nodeRegistry, Scheduler scheduler, int port) {
         this.requestQueue = requestQueue;
+        this.nodeRegistry = nodeRegistry;
+        this.scheduler = scheduler;
         this.port = port;
         this.httpClient = HttpClient.newHttpClient();
     }
@@ -129,9 +137,6 @@ public class LoadBalancerAPIServer {
                 System.out.printf("[API] UPLOAD %s: %s (%.2f MB)%n",
                         fileId, fileName, fileContent.length / 1_000_000.0);
 
-                // Forward to Aggregator service
-                forwardUploadToAggregator(fileId, fileName, fileContent);
-
                 // Queue request for load balancer
                 Request request = new Request(fileId, Request.Type.UPLOAD, fileSize, 0);
                 requestQueue.add(request);
@@ -186,8 +191,22 @@ public class LoadBalancerAPIServer {
                 requestQueue.add(request);
                 requestQueue.notifyNewRequest();
 
-                // Fetch file from Aggregator
-                byte[] fileContent = fetchFileFromAggregator(fileId);
+                // Synchronous load balancing for download
+                List<StorageNode> healthyNodes = nodeRegistry.getHealthyNodes();
+                if (healthyNodes.isEmpty()) {
+                    sendError(exchange, 503, "No healthy nodes available");
+                    return;
+                }
+
+                Request downloadRequest = new Request(fileId, Request.Type.DOWNLOAD, 0, 0);
+                StorageNode selectedNode = scheduler.selectNode(healthyNodes, downloadRequest);
+                if (selectedNode == null) {
+                    sendError(exchange, 500, "Scheduler failed to select a node");
+                    return;
+                }
+
+                // Fetch file from the selected node
+                byte[] fileContent = fetchFileFromNode(selectedNode, fileId);
 
                 if (fileContent == null || fileContent.length == 0) {
                     sendError(exchange, 404, "File not found");
@@ -246,55 +265,9 @@ public class LoadBalancerAPIServer {
         }
     }
 
-    /**
-     * Forward file upload to Aggregator service.
-     *
-     * Sends HTTP POST request to first Aggregator (aggservice-1:8080). File
-     * content is sent in request body.
-     *
-     * @param fileId Unique file identifier
-     * @param fileName Name of the file
-     * @param fileContent File content bytes
-     */
-    private void forwardUploadToAggregator(String fileId, String fileName, byte[] fileContent) {
-        try {
-            String aggUrl = "http://aggservice-1:8080/files/upload";
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(new URI(aggUrl))
-                    .header("X-File-ID", fileId)
-                    .header("X-File-Name", fileName)
-                    .header("X-File-Size", String.valueOf(fileContent.length))
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(fileContent))
-                    .timeout(java.time.Duration.ofSeconds(30))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request,
-                    HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() >= 400) {
-                System.err.printf("[API] Aggregator error (HTTP %d): %s%n",
-                        response.statusCode(), response.body());
-            } else {
-                System.out.println("[API] Forwarded to Aggregator: HTTP " + response.statusCode());
-            }
-
-        } catch (Exception e) {
-            System.err.println("[API] Error forwarding to Aggregator: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Fetch file from Aggregator service.
-     *
-     * Sends HTTP GET request to Aggregator to retrieve file content.
-     *
-     * @param fileId File identifier to fetch
-     * @return File content bytes
-     * @throws Exception if fetch fails
-     */
-    private byte[] fetchFileFromAggregator(String fileId) throws Exception {
-        String aggUrl = "http://aggservice-1:8080/files/" + fileId + "/download";
+    private byte[] fetchFileFromNode(StorageNode node, String fileId) throws Exception {
+        String aggUrl = "http://" + node.getAddress() + "/files/" + fileId + "/download";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(new URI(aggUrl))

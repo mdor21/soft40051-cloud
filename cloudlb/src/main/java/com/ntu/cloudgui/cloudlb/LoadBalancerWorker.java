@@ -10,6 +10,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 
 /**
  * LoadBalancerWorker Class - Request Processing Thread
@@ -49,6 +52,7 @@ public class LoadBalancerWorker implements Runnable {
     private final RequestQueue requestQueue;
     private final NodeRegistry nodeRegistry;
     private final Scheduler scheduler;
+    private final Map<String, Semaphore> nodeLocks = new ConcurrentHashMap<>();
 
     /**
      * Create a new LoadBalancerWorker.
@@ -123,15 +127,23 @@ public class LoadBalancerWorker implements Runnable {
                     selectedNode.getName(),
                     selectedNode.getAddress());
 
-                // Forward request to aggregator
-                boolean success = forwardToNode(selectedNode, request);
+                // Acquire lock for the selected node
+                Semaphore lock = nodeLocks.computeIfAbsent(selectedNode.getName(), k -> new Semaphore(1));
+                lock.acquire();
 
-                if (success) {
-                    System.out.printf("[LB Worker] ✓ Successfully processed %s request%n",
-                        request.getType().getDisplayName());
-                } else {
-                    System.out.printf("[LB Worker] ✗ Failed to process %s request%n",
-                        request.getType().getDisplayName());
+                try {
+                    // Forward request to aggregator
+                    boolean success = forwardToNode(selectedNode, request);
+
+                    if (success) {
+                        System.out.printf("[LB Worker] ✓ Successfully processed %s request%n",
+                            request.getType().getDisplayName());
+                    } else {
+                        System.out.printf("[LB Worker] ✗ Failed to process %s request%n",
+                            request.getType().getDisplayName());
+                    }
+                } finally {
+                    lock.release();
                 }
 
             } catch (InterruptedException e) {

@@ -5,9 +5,9 @@
 /app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/Request.java
 /app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/RequestQueue.java
 /app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/ScalingService.java
-/app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/core/FcfsScheduler.java
 /app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/core/HealthChecker.java
 /app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/core/NodeRegistry.java
+/app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/core/RoundRobinDistributionScheduler.java
 /app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/core/RoundRobinScheduler.java
 /app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/core/Scheduler.java
 /app/cloudlb/src/main/java/com/ntu/cloudgui/cloudlb/core/SjnScheduler.java

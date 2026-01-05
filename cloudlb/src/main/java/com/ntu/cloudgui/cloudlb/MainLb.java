@@ -108,7 +108,7 @@ public class MainLb {
             System.out.println("[Main] Starting HTTP API Server...");
             try {
                 LoadBalancerAPIServer apiServer = new LoadBalancerAPIServer(
-                    requestQueue, API_SERVER_PORT);
+                    requestQueue, nodeRegistry, scheduler, API_SERVER_PORT);
                 apiServer.start();  // Blocking call - starts HTTP server
                 System.out.printf("[Main] ✓ HTTP API Server listening on port %d%n",
                     API_SERVER_PORT);
@@ -189,8 +189,8 @@ public class MainLb {
     private static Scheduler createScheduler(String schedulerType) {
         switch (schedulerType) {
             case "FCFS":
-                System.out.println("[Main] Scheduler: FCFS (First Come First Serve)");
-                return new FcfsScheduler();
+                System.out.println("[Main] Scheduler: FCFS (Round Robin Distribution)");
+                return new RoundRobinDistributionScheduler();
 
             case "SJN":
                 System.out.println("[Main] Scheduler: SJN (Shortest Job Next)");
