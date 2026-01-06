@@ -32,7 +32,6 @@ public class MainLb {
     private static final int API_SERVER_PORT = 8080;
     private static final int HEALTH_CHECK_INTERVAL_MS = 5000;  // 5 seconds
     private static final int SCALING_CHECK_INTERVAL_MS = 10000; // 10 seconds
-    private static final String MQTT_BROKER_URL = "tcp://mqtt-broker:1883";
     private static final String MQTT_CLIENT_ID = "cloudlb";
     private static final String MQTT_TOPIC = "lb/scale/request";
 
@@ -86,12 +85,22 @@ public class MainLb {
 
             // Start scaling service
             System.out.println("[Main] Starting Scaling Service...");
-            int scalingUpThreshold = 80; // Example value
-            int scalingDownThreshold = 20; // Example value
-            ScalingService scalingService = new ScalingService(requestQueue, MQTT_BROKER_URL, MQTT_CLIENT_ID, MQTT_TOPIC, scalingUpThreshold, scalingDownThreshold);
+            String mqttHost = System.getenv().getOrDefault("MQTT_BROKER_HOST", "mqtt-broker");
+            String mqttPort = System.getenv().getOrDefault("MQTT_BROKER_PORT", "1883");
+            String mqttBrokerUrl = "tcp://" + mqttHost + ":" + mqttPort;
+
+            int scalingUpThreshold = 80; // Scale up if queue > 80
+            int scalingDownThreshold = 20; // Scale down if queue < 20
+            ScalingService scalingService = new ScalingService(
+                requestQueue,
+                mqttBrokerUrl,
+                MQTT_CLIENT_ID,
+                MQTT_TOPIC,
+                scalingUpThreshold,
+                scalingDownThreshold);
             ScheduledExecutorService scalingScheduler = Executors.newSingleThreadScheduledExecutor();
             scalingScheduler.scheduleAtFixedRate(scalingService::checkAndScale, 0, SCALING_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
-            System.out.printf("[Main] ✓ Scaling service started (interval: %d ms)%n", SCALING_CHECK_INTERVAL_MS);
+            System.out.printf("[Main] ✓ Scaling service scheduled (interval: %d ms)%n", SCALING_CHECK_INTERVAL_MS);
 
 
             // Start load balancer worker
