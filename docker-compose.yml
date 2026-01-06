@@ -65,36 +65,21 @@ services:
       context: .
       dockerfile: Dockerfile.aggregator
     container_name: aggregator
+    ports:
+      - "9000:9000"
     environment:
       - DB_HOST=lamp-server
       - DB_PORT=3306
-      - DB_NAME=soft40051
-      - DB_USER=soft40051
-      - DB_PASSWORD=soft40051
+      - DB_NAME=aggservice_db
+      - DB_USER=admin
+      - DB_PASSWORD=admin
       - FILE_SERVERS=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
-    networks:
-      - soft40051_network
+      - AGGREGATOR_PORT=9000
     depends_on:
       lamp-server:
         condition: service_healthy
-
-  aggservice:
-    build:
-      context: ./AggService
-    container_name: aggservice
-    scale: 2
-    ports:
-      - "8082-8083:8082-8083"
-    environment:
-      - DB_HOST=lamp-server
-      - DB_PORT=3306
-      - DB_NAME=cloud_gui
-      - DB_USER=admin
-      - DB_PASS=admin
-    depends_on:
-      - lamp-server
     networks:
-      - cloud-network
+      - soft40051_network
 
   soft40051-files-container1:
     build:
@@ -157,7 +142,7 @@ services:
       MYSQL_PASSWORD: soft40051
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./sql/aggservice_schema.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - soft40051_network
     healthcheck:
@@ -196,10 +181,8 @@ services:
     networks:
       - soft40051_network
     depends_on:
-      mqtt-broker:
-        condition: service_healthy
-      aggregator:
-        condition: service_started
+      - mqtt-broker
+      - aggregator
     expose:
       - "8888"
 
@@ -216,8 +199,7 @@ services:
     networks:
       - soft40051_network
     depends_on:
-      mqtt-broker:
-        condition: service_healthy
+      - mqtt-broker
 
   jenkins-soft40051:
     image: jenkins/jenkins:lts

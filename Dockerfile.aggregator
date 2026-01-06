@@ -1,16 +1,23 @@
-FROM maven:3.8-openjdk-11 AS builder
+# Use an official Maven image to build the application
+FROM maven:3.9-eclipse-temurin-21 AS build
+
+# Set the working directory
 WORKDIR /app
-COPY . .
-RUN mvn clean package -DskipTests -pl soft40051-aggregator
 
-FROM openjdk:11-jre-slim
+# Copy the aggregator service source code
+COPY AggService /app
+
+# Build the application
+RUN mvn -f /app/pom.xml clean package
+
+# Use a smaller base image to run the application
+FROM eclipse-temurin:21-jre
+
+# Set the working directory
 WORKDIR /app
-COPY --from=builder /app/soft40051-aggregator/target/*.jar aggregator.jar
 
-ENV DB_HOST=lamp-server
-ENV DB_PORT=3306
-ENV DB_NAME=soft40051
-ENV DB_USER=root
-ENV FILE_SERVERS=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
+# Copy the JAR file from the build stage
+COPY --from=build /app/target/aggservice-1.0.0.jar /app/aggregator.jar
 
-ENTRYPOINT ["java", "-jar", "aggregator.jar"]
+# Run the application
+CMD ["java", "-jar", "/app/aggregator.jar"]

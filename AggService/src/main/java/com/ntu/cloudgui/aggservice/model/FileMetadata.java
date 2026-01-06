@@ -1,13 +1,8 @@
 package com.ntu.cloudgui.aggservice.model;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "file_metadata")
 public class FileMetadata {
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private String fileId;
     private String originalName;
     private int totalChunks;
@@ -25,24 +20,6 @@ public class FileMetadata {
         this.sizeBytes = sizeBytes;
         this.encryptionAlgo = encryptionAlgo;
         this.uploadedAt = uploadedAt;
-    }
-
-    public FileMetadata(String originalName, String encryptionAlgo, int totalChunks, long sizeBytes) {
-        this.originalName = originalName;
-        this.encryptionAlgo = encryptionAlgo;
-        this.totalChunks = totalChunks;
-        this.sizeBytes = sizeBytes;
-        this.uploadedAt = LocalDateTime.now();
-    }
-
-    // This constructor is added to match the call from FileProcessingService
-    public FileMetadata(String originalName, String encryptionAlgo, int totalChunks, long sizeBytes, String key) {
-        this.originalName = originalName;
-        this.encryptionAlgo = encryptionAlgo;
-        this.totalChunks = totalChunks;
-        this.sizeBytes = sizeBytes;
-        this.uploadedAt = LocalDateTime.now();
-        // The 5th argument `key` is ignored for now, but this resolves the constructor error.
     }
 
     public boolean isValid() {
