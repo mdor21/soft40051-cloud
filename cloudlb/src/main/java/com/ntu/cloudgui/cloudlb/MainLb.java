@@ -86,12 +86,18 @@ public class MainLb {
 
             // Start scaling service
             System.out.println("[Main] Starting Scaling Service...");
-            int scalingUpThreshold = 80; // Example value
-            int scalingDownThreshold = 20; // Example value
-            ScalingService scalingService = new ScalingService(requestQueue, MQTT_BROKER_URL, MQTT_CLIENT_ID, MQTT_TOPIC, scalingUpThreshold, scalingDownThreshold);
+            int scalingUpThreshold = 80; // Scale up if queue > 80
+            int scalingDownThreshold = 20; // Scale down if queue < 20
+            ScalingService scalingService = new ScalingService(
+                requestQueue,
+                MQTT_BROKER_URL,
+                MQTT_CLIENT_ID,
+                MQTT_TOPIC,
+                scalingUpThreshold,
+                scalingDownThreshold);
             ScheduledExecutorService scalingScheduler = Executors.newSingleThreadScheduledExecutor();
             scalingScheduler.scheduleAtFixedRate(scalingService::checkAndScale, 0, SCALING_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
-            System.out.printf("[Main] ✓ Scaling service started (interval: %d ms)%n", SCALING_CHECK_INTERVAL_MS);
+            System.out.printf("[Main] ✓ Scaling service scheduled (interval: %d ms)%n", SCALING_CHECK_INTERVAL_MS);
 
 
             // Start load balancer worker
