@@ -2,7 +2,6 @@ package com.ntu.cloudgui.cloudlb;
 
 import com.google.gson.Gson;
 import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
@@ -14,14 +13,12 @@ import java.util.Map;
 /**
  * Periodically inspects RequestQueue size and publishes
  * scaling commands to HostManager over MQTT.
- * Handles MQTT connection failures gracefully with retries.
  */
 public class ScalingService {
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
     private final RequestQueue requestQueue;
     private final MqttClient client;
-    private final String brokerUrl;
     private final String topic;
     private final Gson gson;
     private final int scaleUpThreshold;
@@ -33,46 +30,17 @@ public class ScalingService {
                           String clientId,
                           String topic,
                           int scaleUpThreshold,
-                          int scaleDownThreshold) {
+                          int scaleDownThreshold) throws MqttException {
         this.requestQueue = requestQueue;
-        this.brokerUrl = brokerUrl;
+        this.client = new MqttClient(brokerUrl, clientId);
         this.topic = topic;
         this.scaleUpThreshold = scaleUpThreshold;
         this.scaleDownThreshold = scaleDownThreshold;
+        this.client.connect();
         this.gson = new Gson();
-
-        MqttClient tempClient = null;
-        try {
-            tempClient = new MqttClient(brokerUrl, clientId);
-        } catch (MqttException e) {
-            System.err.printf("[%s] [SCALING] FATAL: Could not create MQTT client for %s: %s. Scaling will be disabled.%n",
-                LocalDateTime.now().format(TIME_FORMAT), brokerUrl, e.getMessage());
-        }
-        this.client = tempClient;
-
-        System.out.printf("[%s] [SCALING] Service initialized for MQTT broker: %s (thresholds: up=%d, down=%d)%n",
-            LocalDateTime.now().format(TIME_FORMAT), brokerUrl, scaleUpThreshold, scaleDownThreshold);
-    }
-
-    /**
-     * Ensures the MQTT client is connected. If not, attempts to reconnect.
-     */
-    private void ensureConnected() {
-        if (client != null && !client.isConnected()) {
-            String timestamp = LocalDateTime.now().format(TIME_FORMAT);
-            try {
-                System.out.printf("[%s] [SCALING] MQTT client not connected. Attempting to connect to %s...%n", timestamp, brokerUrl);
-                MqttConnectOptions connOpts = new MqttConnectOptions();
-                connOpts.setCleanSession(true);
-                connOpts.setAutomaticReconnect(true); // Let the Paho library handle reconnects
-                connOpts.setConnectionTimeout(5); // 5-second timeout
-                client.connect(connOpts);
-                System.out.printf("[%s] [SCALING] Successfully connected to MQTT broker.%n", LocalDateTime.now().format(TIME_FORMAT));
-            } catch (MqttException e) {
-                // This is expected if the broker is not ready, so don't print a scary stack trace.
-                System.err.printf("[%s] [SCALING] Failed to connect to MQTT broker: %s%n", timestamp, e.getMessage());
-            }
-        }
+        String timestamp = LocalDateTime.now().format(TIME_FORMAT);
+        System.out.printf("[%s] [SCALING] Connected to MQTT broker: %s (thresholds: up=%d, down=%d)%n",
+            timestamp, brokerUrl, scaleUpThreshold, scaleDownThreshold);
     }
 
     /**
@@ -80,17 +48,6 @@ public class ScalingService {
      * Call this periodically from MainLb using a ScheduledExecutor.
      */
     public void checkAndScale() {
-        if (this.client == null) {
-            return; // Service was not initialized correctly.
-        }
-
-        ensureConnected(); // Make sure we are connected before checking
-
-        if (!client.isConnected()) {
-             // Silently return if not connected, ensureConnected will have logged the error.
-            return;
-        }
-
         int queueSize = requestQueue.size();
         String timestamp = LocalDateTime.now().format(TIME_FORMAT);
 
@@ -111,16 +68,8 @@ public class ScalingService {
                     lastPublishedAction = 0;
                 }
             }
-        } catch (MqttException e) {
-            // Log and disconnect so ensureConnected will try again next time.
-            System.err.printf("[%s] [SCALING] Error during scale check: %s. Disconnecting.%n", timestamp, e.getMessage());
-            try {
-                client.disconnect();
-            } catch (MqttException disconnectException) {
-                // Ignore
-            }
         } catch (Exception e) {
-            System.err.printf("[%s] [SCALING] Unexpected error during scale check: %s%n", timestamp, e.getMessage());
+            System.err.printf("[%s] [SCALING] Error during scale check: %s%n", timestamp, e.getMessage());
             e.printStackTrace();
         }
     }
