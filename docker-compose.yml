@@ -1,267 +1,66 @@
 version: '3.8'
 
 services:
-  ntu-vm-soft40051:
-    build:
-      context: .
-      dockerfile: Dockerfile.gui
-    container_name: ntu-vm-soft40051
-    ports:
-      - "3390:3389"
-      - "2022:22"
-    environment:
-      - LOAD_BALANCER_HOST=load-balancer
-      - LOAD_BALANCER_PORT=8888
-      - DB_HOST=lamp-server
-      - DB_PORT=3306
-    networks:
-      - soft40051_network
-    depends_on:
-      - load-balancer
-      - lamp-server
-    stdin_open: true
-    tty: true
-
-  cloud-gui:
-    build:
-      context: ./cloud-gui
-    container_name: cloud-gui
+  aggservice:
+    build: ./AggService
     ports:
       - "8080:8080"
     environment:
       - DB_HOST=lamp-server
       - DB_PORT=3306
-      - DB_NAME=cloud_gui
-      - DB_USER=admin
-      - DB_PASS=admin
-    depends_on:
-      - cloudlb
-      - lamp-server
-    networks:
-      - cloud-network
-
-  cloudlb:
-    build:
-      context: ./cloudlb
-    container_name: cloudlb
-    ports:
-      - "8081:8081"
-    environment:
-      - SCHEDULER=ROUND_ROBIN
-      - MQTT_BROKER_URL=mqtt-broker:1883
-      - DB_HOST=lamp-server
-      - DB_PORT=3306
-      - DB_NAME=cloud_gui
-      - DB_USER=admin
-      - DB_PASS=admin
-    depends_on:
-      - mqtt-broker
-      - lamp-server
-    networks:
-      - cloud-network
-
-  aggregator:
-    build:
-      context: .
-      dockerfile: Dockerfile.aggregator
-    container_name: aggregator
-    environment:
-      - DB_HOST=lamp-server
-      - DB_PORT=3306
-      - DB_NAME=soft40051
-      - DB_USER=soft40051
-      - DB_PASSWORD=soft40051
-      - FILE_SERVERS=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
-    networks:
-      - soft40051_network
-    depends_on:
-      lamp-server:
-        condition: service_healthy
-
-  aggservice:
-    build:
-      context: ./AggService
-    container_name: aggservice
-    scale: 2
-    ports:
-      - "8082-8083:8082-8083"
-    environment:
-      - DB_HOST=lamp-server
-      - DB_PORT=3306
-      - DB_NAME=cloud_gui
-      - DB_USER=admin
-      - DB_PASS=admin
-    depends_on:
-      - lamp-server
-    networks:
-      - cloud-network
-
-  soft40051-files-container1:
-    build:
-      context: .
-      dockerfile: Dockerfile.file-server
-    container_name: soft40051-files-container1
-    ports:
-      - "4848:22"
-    volumes:
-      - file_storage_1:/mnt/storage
-    networks:
-      - soft40051_network
-
-  soft40051-files-container2:
-    build:
-      context: .
-      dockerfile: Dockerfile.file-server
-    container_name: soft40051-files-container2
-    ports:
-      - "4849:22"
-    volumes:
-      - file_storage_2:/mnt/storage
-    networks:
-      - soft40051_network
-
-  soft40051-files-container3:
-    build:
-      context: .
-      dockerfile: Dockerfile.file-server
-    container_name: soft40051-files-container3
-    ports:
-      - "4850:22"
-    volumes:
-      - file_storage_3:/mnt/storage
-    networks:
-      - soft40051_network
-
-  soft40051-files-container4:
-    build:
-      context: .
-      dockerfile: Dockerfile.file-server
-    container_name: soft40051-files-container4
-    ports:
-      - "4851:22"
-    volumes:
-      - file_storage_4:/mnt/storage
+      - DB_NAME=cloud_db
+      - DB_USER=root
+      - DB_PASS=password
+      - FILE_SERVER_HOSTS=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
+      - AGGSERVICE_PORT=8080
+      - CHUNK_SIZE=1024
+      - SFTP_USER=user
+      - SFTP_PASS=pass
+      - SFTP_TIMEOUT=30000
     networks:
       - soft40051_network
 
   lamp-server:
-    image: library/mariadb:latest
-    container_name: lamp-server
+    image: mattrayner/lamp:latest-1804
     ports:
       - "3306:3306"
-      - "8080:80"
     environment:
-      MYSQL_ROOT_PASSWORD: soft40051
-      MYSQL_DATABASE: soft40051
-      MYSQL_USER: soft40051
-      MYSQL_PASSWORD: soft40051
+      - MYSQL_ROOT_PASSWORD=password
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - lamp-data:/var/lib/mysql
     networks:
       - soft40051_network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  mqtt-broker:
-    image: eclipse-mosquitto:latest
-    container_name: mqtt-broker
+  soft40051-files-container1:
+    image: pedrombmachado/simple-ssh-container:base
     ports:
-      - "1883:1883"
-    volumes:
-      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_logs:/mosquitto/log
+      - "4848:22"
     networks:
       - soft40051_network
-    healthcheck:
-      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$SYS/broker/load/messages/received", "-C", "1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  load-balancer:
-    build:
-      context: .
-      dockerfile: Dockerfile.load-balancer
-    container_name: load-balancer
-    environment:
-      - MQTT_BROKER_HOST=mqtt-broker
-      - MQTT_BROKER_PORT=1883
-      - AGGREGATOR_HOST=aggregator
-      - LB_PORT=8888
-    networks:
-      - soft40051_network
-    depends_on:
-      mqtt-broker:
-        condition: service_healthy
-      aggregator:
-        condition: service_started
-    expose:
-      - "8888"
-
-  host-manager:
-    build:
-      context: .
-      dockerfile: Dockerfile.host-manager
-    container_name: host-manager
-    environment:
-      - MQTT_BROKER_HOST=mqtt-broker
-      - MQTT_BROKER_PORT=1883
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - soft40051_network
-    depends_on:
-      mqtt-broker:
-        condition: service_healthy
-
-  jenkins-soft40051:
-    image: jenkins/jenkins:lts
-    container_name: jenkins-soft40051
+  soft40051-files-container2:
+    image: pedrombmachado/simple-ssh-container:base
     ports:
-      - "8081:8080"
-      - "50001:50000"
-    volumes:
-      - jenkins_home:/var/jenkins_home
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - JENKINS_OPTS=--prefix=/jenkins
+      - "4849:22"
     networks:
       - soft40051_network
 
-  gitea:
-    image: docker.gitea.com/gitea:latest
-    container_name: gitea
+  soft40051-files-container3:
+    image: pedrombmachado/simple-ssh-container:base
     ports:
-      - "3000:3000"
-      - "2222:22"
-    volumes:
-      - gitea_data:/data
-      - gitea_config:/etc/gitea
+      - "4850:22"
+    networks:
+      - soft40051_network
+
+  soft40051-files-container4:
+    image: pedrombmachado/simple-ssh-container:base
+    ports:
+      - "4851:22"
     networks:
       - soft40051_network
 
 networks:
   soft40051_network:
-    driver: bridge
-  cloud-network:
-    driver: bridge
 
 volumes:
-  mysql_data:
-  mosquitto_data:
-  mosquitto_logs:
-  file_storage_1:
-  file_storage_2:
-  file_storage_3:
-  file_storage_4:
-  jenkins_home:
-  docker_soft40051:
-  lamp:
-  jenkins_soft40051:
-  gitea_data:
-  gitea_config:
+  lamp-data:
