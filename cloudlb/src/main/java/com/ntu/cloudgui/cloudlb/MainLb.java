@@ -35,18 +35,6 @@ public class MainLb {
     private static final String MQTT_CLIENT_ID = "cloudlb";
     private static final String MQTT_TOPIC = "lb/scale/request";
 
-    // Node configuration
-    private static final String[] NODE_NAMES = {
-        "node-1", "node-2", "node-3", "node-4", "node-5"
-    };
-
-    private static final String[] NODE_ADDRESSES = {
-        "aggservice-1:8080",
-        "aggservice-2:8080",
-        "aggservice-3:8080",
-        "aggservice-4:8080",
-        "aggservice-5:8080"
-    };
 
     /**
      * Main entry point for Load Balancer.
@@ -60,7 +48,6 @@ public class MainLb {
             System.out.println("========================================");
 
             // Parse configuration
-            int nodeCount = getNodeCount();
             String schedulerType = getSchedulerType();
 
             // Create core components
@@ -69,9 +56,8 @@ public class MainLb {
             NodeRegistry nodeRegistry = new NodeRegistry();
             Scheduler scheduler = createScheduler(schedulerType);
 
-            // Register storage nodes
-            System.out.printf("[Main] Registering %d storage nodes:%n", nodeCount);
-            registerStorageNodes(nodeRegistry, nodeCount);
+            // Register storage nodes from environment variable
+            registerStorageNodes(nodeRegistry);
 
             // Start health checker
             System.out.println("[Main] Starting Health Checker...");
@@ -131,7 +117,7 @@ public class MainLb {
             System.out.println("========================================");
             System.out.println("[Main] ✓ Load Balancer fully initialized!");
             System.out.printf("[Main] Scheduler: %s%n", schedulerType.toUpperCase());
-            System.out.printf("[Main] Storage Nodes: %d%n", nodeCount);
+            System.out.printf("[Main] Storage Nodes: %d%n", nodeRegistry.getAllNodes().size());
             System.out.printf("[Main] API Server Port: %d%n", API_SERVER_PORT);
             System.out.println("========================================");
 
@@ -148,28 +134,6 @@ public class MainLb {
         }
     }
 
-    /**
-     * Get node count from environment variable.
-     *
-     * @return Number of nodes to register (1-5, default: 2)
-     */
-    private static int getNodeCount() {
-        String envValue = System.getenv("NODE_COUNT");
-        if (envValue != null) {
-            try {
-                int count = Integer.parseInt(envValue);
-                if (count >= 1 && count <= NODE_NAMES.length) {
-                    return count;
-                }
-                System.out.printf("[Main] Invalid NODE_COUNT: %d (using default: %d)%n",
-                    count, DEFAULT_NODE_COUNT);
-            } catch (NumberFormatException e) {
-                System.out.printf("[Main] Invalid NODE_COUNT format: %s (using default: %d)%n",
-                    envValue, DEFAULT_NODE_COUNT);
-            }
-        }
-        return DEFAULT_NODE_COUNT;
-    }
 
     /**
      * Get scheduler type from environment variable.
@@ -215,16 +179,31 @@ public class MainLb {
     }
 
     /**
-     * Register storage nodes in the registry.
+     * Register storage nodes in the registry from the STORAGE_NODES environment variable.
+     * The variable should be a comma-separated list of addresses, e.g.,
+     * "aggservice-1:8080,aggservice-2:8080"
      *
-     * @param nodeRegistry Registry to register nodes in
-     * @param nodeCount Number of nodes to register
+     * @param nodeRegistry Registry to register nodes in.
      */
-    private static void registerStorageNodes(NodeRegistry nodeRegistry, int nodeCount) {
-        for (int i = 0; i < nodeCount && i < NODE_NAMES.length; i++) {
-            StorageNode node = new StorageNode(NODE_NAMES[i], NODE_ADDRESSES[i]);
+    private static void registerStorageNodes(NodeRegistry nodeRegistry) {
+        String nodesEnv = System.getenv("STORAGE_NODES");
+        if (nodesEnv == null || nodesEnv.trim().isEmpty()) {
+            // Fallback to a default if the environment variable is not set.
+            nodesEnv = "aggservice-1:8080,aggservice-2:8080";
+            System.out.printf("[Main] WARNING: STORAGE_NODES env var not set. Falling back to default: %s%n", nodesEnv);
+        }
+
+        String[] nodeAddresses = nodesEnv.split(",");
+        System.out.printf("[Main] Registering %d storage nodes:%n", nodeAddresses.length);
+
+        for (int i = 0; i < nodeAddresses.length; i++) {
+            String address = nodeAddresses[i].trim();
+            if (address.isEmpty()) continue;
+            // The node name is derived from the address for simplicity.
+            String name = "node-" + (i + 1);
+            StorageNode node = new StorageNode(name, address);
             nodeRegistry.registerNode(node);
-            System.out.printf("[Main]   • %s (%s)%n", NODE_NAMES[i], NODE_ADDRESSES[i]);
+            System.out.printf("[Main]   • %s (%s)%n", name, address);
         }
     }
 }
