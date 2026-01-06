@@ -8,8 +8,6 @@ import com.ntu.cloudgui.aggservice.repository.ChunkMetadataRepository;
 import com.ntu.cloudgui.aggservice.repository.FileMetadataRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -19,33 +17,15 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Semaphore; // Import Semaphore
+import java.util.concurrent.Semaphore;
 
-/**
- * FileProcessingService - File Upload and Chunking Orchestration.
- *
- * Orchestrates the complete file upload workflow:
- * 1. Validate file
- * 2. Generate fileId (UUID)
- * 3. Save file metadata to database
- * 4. Read file and split into chunks
- * 5. For each chunk: CRC, encrypt, store, save metadata
- * 6. Handle errors with automatic rollback
- *
- * Chunk Size: 5 MB (5242880 bytes)
- * Max File Size: 5 GB
- * Encryption: AES-256
- */
-@Service
 public class FileProcessingService {
 
     private static final Logger logger = LoggerFactory.getLogger(FileProcessingService.class);
 
-    private static final int CHUNK_SIZE = 5 * 1024 * 1024;                 // 5 MB
-    private static final long MAX_FILE_SIZE = 5L * 1024 * 1024 * 1024;     // 5 GB
+    private final int chunkSize;
+    private static final long MAX_FILE_SIZE = 5L * 1024 * 1024 * 1024; // 5 GB
 
-    // Define a semaphore to limit concurrent file operations.
-    // The number of permits is read from application.properties
     private final Semaphore fileOperationSemaphore;
 
     private final FileMetadataRepository fileRepo;
@@ -53,56 +33,26 @@ public class FileProcessingService {
     private final EncryptionService encryptionService;
     private final ChunkStorageService storageService;
     private final CrcValidationService crcService;
-    private final MetadataService metadataService;
-    private final DatabaseLoggingService dbLogger;
 
     public FileProcessingService(FileMetadataRepository fileRepo,
                                  ChunkMetadataRepository chunkRepo,
                                  EncryptionService encryptionService,
                                  ChunkStorageService storageService,
                                  CrcValidationService crcService,
-                                 MetadataService metadataService,
-                                 DatabaseLoggingService dbLogger,
-                                 @Value("${semaphore.permits:10}") int semaphorePermits) {
+                                 int semaphorePermits,
+                                 int chunkSize) {
         this.fileRepo = fileRepo;
         this.chunkRepo = chunkRepo;
         this.encryptionService = encryptionService;
         this.storageService = storageService;
         this.crcService = crcService;
-        this.metadataService = metadataService;
-        this.dbLogger = dbLogger;
         this.fileOperationSemaphore = new Semaphore(semaphorePermits);
+        this.chunkSize = chunkSize;
     }
 
-    /**
-     * Process file upload end-to-end.
-     *
-     * Complete workflow:
-     * 1. Validate file exists and is readable
-     * 2. Check file size is within limits
-     * 3. Generate unique fileId (UUID)
-     * 4. Save file metadata to database
-     * 5. Read file in 5MB chunks
-     * 6. For each chunk:
-     *    a. Calculate CRC32 checksum
-     *    b. Encrypt with AES-256
-     *    c. Select server (round-robin)
-     *    d. Store encrypted chunk via SFTP
-     *    e. Save chunk metadata to database
-     * 7. Return fileId to client
-     *
-     * On error: Automatic rollback deletes all stored chunks and metadata.
-     *
-     * @param file File object to process
-     * @param encryptionAlgo Encryption algorithm (e.g., "AES")
-     * @return Generated fileId (UUID)
-     * @throws ProcessingException if file processing fails
-     */
     public String processUpload(File file, String encryptionAlgo)
             throws ProcessingException {
-
         logger.info("Attempting to acquire lock for file upload: {}", file.getName());
-        dbLogger.info(String.format("Upload initiated for file: %s", file.getName()));
         try {
             fileOperationSemaphore.acquire();
             logger.info("Lock acquired for file upload: {}", file.getName());
@@ -114,7 +64,6 @@ public class FileProcessingService {
             logger.debug("Generated fileId: {}", fileId);
 
             try {
-                // 1. Create and save file metadata
                 FileMetadata fileMetadata = new FileMetadata(
                         fileId,
                         file.getName(),
@@ -126,22 +75,14 @@ public class FileProcessingService {
                 fileRepo.save(fileMetadata);
                 logger.debug("✓ File metadata saved: {}", fileId);
 
-                // 2. Process all chunks
                 List<ChunkMetadata> chunkMetadataList = processChunks(fileId, file, encryptionAlgo);
 
                 logger.info("✓ File upload completed successfully: {} ({} chunks)",
                         fileId, chunkMetadataList.size());
-                dbLogger.info(String.format("File upload successful for %s. File ID: %s", file.getName(), fileId));
                 return fileId;
 
-            } catch (ProcessingException e) {
-                logger.error("✗ File upload failed, rolling back: {}", e.getMessage());
-                dbLogger.error(String.format("File upload failed for %s: %s", file.getName(), e.getMessage()));
-                rollbackFileUpload(fileId);
-                throw e;
             } catch (Exception e) {
-                logger.error("✗ Unexpected error during upload, rolling back: {}", e.getMessage(), e);
-                dbLogger.error(String.format("Unexpected error during upload for %s: %s", file.getName(), e.getMessage()));
+                logger.error("✗ File upload failed, rolling back: {}", e.getMessage(), e);
                 rollbackFileUpload(fileId);
                 throw new ProcessingException(
                         "Unexpected error during file processing: " + e.getMessage(),
@@ -151,7 +92,6 @@ public class FileProcessingService {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            dbLogger.error("File upload was interrupted while waiting for lock for file: " + file.getName());
             throw new ProcessingException("File upload was interrupted while waiting for lock", ErrorType.PROCESSING_ERROR, e);
         } finally {
             fileOperationSemaphore.release();
@@ -159,54 +99,34 @@ public class FileProcessingService {
         }
     }
 
-    /**
-     * Process file download end-to-end.
-     *
-     * @param fileId         The ID of the file to download.
-     * @param encryptionAlgo The encryption algorithm used for the file.
-     * @return The decrypted file data as a byte array.
-     * @throws ProcessingException if file download fails.
-     */
     public byte[] processDownload(String fileId, String encryptionAlgo) throws ProcessingException {
         logger.info("Attempting to acquire lock for file download: {}", fileId);
-        dbLogger.info(String.format("Download initiated for file ID: %s", fileId));
         try {
             fileOperationSemaphore.acquire();
             logger.info("Lock acquired for file download: {}", fileId);
 
-            // 1. Retrieve file metadata
             FileMetadata fileMetadata = getFile(fileId);
-
-            // 2. Retrieve chunk metadata
             List<ChunkMetadata> chunkMetadataList = chunkRepo.findByFileIdOrderByChunkIndex(fileId);
 
-            // 3. Download, decrypt, and reassemble chunks
             try (ByteArrayOutputStream reassembledFile = new ByteArrayOutputStream()) {
                 for (ChunkMetadata chunkMetadata : chunkMetadataList) {
                     byte[] encryptedChunk = storageService.retrieveChunk(chunkMetadata.getServerHost(), chunkMetadata.getRemotePath());
                     byte[] decryptedChunk = encryptionService.decrypt(encryptedChunk, encryptionAlgo);
 
-                    // Optional: CRC32 validation
                     long crc32 = crcService.calculateCrc32(decryptedChunk);
                     if (crc32 != chunkMetadata.getCrc32()) {
-                        String errorMsg = String.format("CRC32 checksum mismatch for file %s, chunk %d", fileId, chunkMetadata.getChunkIndex());
-                        dbLogger.error(errorMsg);
-                        throw new ProcessingException(errorMsg, ErrorType.VALIDATION_ERROR);
+                        throw new ProcessingException("CRC32 checksum mismatch for chunk " + chunkMetadata.getChunkIndex(), ErrorType.VALIDATION_ERROR);
                     }
 
                     reassembledFile.write(decryptedChunk);
                 }
                 logger.info("✓ File download completed successfully: {}", fileId);
-                dbLogger.info(String.format("File download successful for file ID: %s", fileId));
                 return reassembledFile.toByteArray();
             } catch (IOException e) {
-                String errorMsg = "Failed to reassemble file: " + e.getMessage();
-                dbLogger.error(errorMsg);
-                throw new ProcessingException(errorMsg, ErrorType.PROCESSING_ERROR, e);
+                throw new ProcessingException("Failed to reassemble file: " + e.getMessage(), ErrorType.PROCESSING_ERROR, e);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            dbLogger.error("File download was interrupted while waiting for lock for file ID: " + fileId);
             throw new ProcessingException("File download was interrupted while waiting for lock", ErrorType.PROCESSING_ERROR, e);
         } finally {
             fileOperationSemaphore.release();
@@ -214,22 +134,8 @@ public class FileProcessingService {
         }
     }
 
-    /**
-     * Retrieve file metadata by ID.
-     *
-     * Used before download to get file information:
-     * - Original filename
-     * - Total chunk count
-     * - File size
-     * - Encryption algorithm
-     *
-     * @param fileId Unique file identifier (UUID)
-     * @return FileMetadata object
-     * @throws ProcessingException if file not found or database error
-     */
     public FileMetadata getFile(String fileId) throws ProcessingException {
         logger.debug("Retrieving file: {}", fileId);
-
         try {
             FileMetadata fileMetadata = fileRepo.findById(fileId);
             if (fileMetadata == null) {
@@ -238,14 +144,9 @@ public class FileProcessingService {
                         ErrorType.FILE_NOT_FOUND
                 );
             }
-
             logger.debug("✓ File retrieved: {}", fileId);
             return fileMetadata;
-
-        } catch (ProcessingException e) {
-            throw e;
         } catch (Exception e) {
-            logger.error("Database error retrieving file: {}", e.getMessage(), e);
             throw new ProcessingException(
                     "Failed to retrieve file metadata: " + e.getMessage(),
                     ErrorType.PROCESSING_ERROR,
@@ -254,236 +155,54 @@ public class FileProcessingService {
         }
     }
 
-    /**
-     * Delete file and all associated chunks.
-     *
-     * Process:
-     * 1. Fetch all chunk metadata for file
-     * 2. Delete each encrypted chunk from storage servers (SFTP)
-     * 3. Delete all chunk metadata from database
-     * 4. Delete file metadata from database
-     *
-     * Best-effort approach: Continues even if individual chunk deletion fails.
-     * Logs warnings for failed deletions.
-     *
-     * @param fileId Unique file identifier (UUID)
-     * @throws ProcessingException if critical error occurs
-     */
-    public void deleteFile(String fileId) throws ProcessingException {
-        logger.info("Attempting to acquire lock for file deletion: {}", fileId);
-        dbLogger.info(String.format("Deletion initiated for file ID: %s", fileId));
-        try {
-            fileOperationSemaphore.acquire();
-            logger.info("Lock acquired for file deletion: {}", fileId);
-
-            logger.info("Deleting file: {}", fileId);
-
-            try {
-                // 1. Fetch all chunks for this file
-                List<ChunkMetadata> chunks = chunkRepo.findByFileIdOrderByChunkIndex(fileId);
-
-                // 2. Delete chunks from storage servers
-                for (ChunkMetadata chunk : chunks) {
-                    try {
-                        storageService.deleteChunk(chunk.getServerHost(), chunk.getRemotePath());
-                        logger.debug("✓ Chunk deleted from storage: {}[{}]",
-                                fileId, chunk.getChunkIndex());
-                    } catch (ProcessingException e) {
-                        logger.warn("Failed to delete chunk from storage: {}[{}]",
-                                fileId, chunk.getChunkIndex(), e);
-                    }
-                }
-
-                // 3. Delete chunk metadata from database
-                chunkRepo.deleteByFileId(fileId);
-                logger.debug("✓ Chunk metadata deleted: {}", fileId);
-
-                // 4. Delete file metadata from database
-                fileRepo.deleteById(fileId);
-                logger.info("✓ File deleted successfully: {}", fileId);
-                dbLogger.info(String.format("File deletion successful for file ID: %s", fileId));
-
-            } catch (ProcessingException e) {
-                logger.error("✗ Processing error during file deletion: {}", e.getMessage());
-                dbLogger.error(String.format("Processing error during file deletion for %s: %s", fileId, e.getMessage()));
-                throw e;
-            } catch (Exception e) {
-                logger.error("✗ Unexpected error during file deletion: {}", e.getMessage(), e);
-                dbLogger.error(String.format("Unexpected error during file deletion for %s: %s", fileId, e.getMessage()));
-                throw new ProcessingException(
-                        "Failed to delete file: " + e.getMessage(),
-                        ErrorType.PROCESSING_ERROR,
-                        e
-                );
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            dbLogger.error("File deletion was interrupted while waiting for lock for file ID: " + fileId);
-            throw new ProcessingException("File deletion was interrupted while waiting for lock", ErrorType.PROCESSING_ERROR, e);
-        } finally {
-            fileOperationSemaphore.release();
-            logger.info("Lock released for file deletion: {}", fileId);
-        }
-    }
-
-    /**
-     * Validate file before upload.
-     *
-     * Checks:
-     * - File exists
-     * - File is readable
-     * - File is not empty
-     * - File size within 5GB limit
-     *
-     * @param file File to validate
-     * @throws ProcessingException if validation fails
-     */
     private void validateFile(File file) throws ProcessingException {
         logger.debug("Validating file: {}", file.getName());
-
         if (!file.exists()) {
-            throw new ProcessingException(
-                    "File does not exist: " + file.getName(),
-                    ErrorType.INVALID_FILE
-            );
+            throw new ProcessingException("File does not exist: " + file.getName(), ErrorType.INVALID_FILE);
         }
-
         if (!file.canRead()) {
-            throw new ProcessingException(
-                    "File is not readable: " + file.getName(),
-                    ErrorType.INVALID_FILE
-            );
+            throw new ProcessingException("File is not readable: " + file.getName(), ErrorType.INVALID_FILE);
         }
-
         if (file.length() == 0) {
-            throw new ProcessingException(
-                    "File is empty: " + file.getName(),
-                    ErrorType.INVALID_FILE
-            );
+            throw new ProcessingException("File is empty: " + file.getName(), ErrorType.INVALID_FILE);
         }
-
         if (file.length() > MAX_FILE_SIZE) {
-            throw new ProcessingException(
-                    String.format("File exceeds maximum size (%d bytes): %s",
-                            MAX_FILE_SIZE, file.getName()),
-                    ErrorType.FILE_TOO_LARGE
-            );
+            throw new ProcessingException(String.format("File exceeds maximum size (%d bytes): %s", MAX_FILE_SIZE, file.getName()), ErrorType.FILE_TOO_LARGE);
         }
-
         logger.debug("✓ File validation passed: {}", file.getName());
     }
 
-    /**
-     * Split file into chunks and process them.
-     *
-     * Process:
-     * 1. Open file input stream
-     * 2. Read 5MB chunks
-     * 3. For each chunk: CRC, encrypt, store, save metadata
-     * 4. Handle last chunk (may be < 5MB)
-     *
-     * @param fileId Unique file identifier
-     * @param file File to chunk
-     * @param encryptionAlgo Encryption algorithm
-     * @return List of created ChunkMetadata objects
-     * @throws ProcessingException if chunking fails
-     */
-    private List<ChunkMetadata> processChunks(String fileId,
-                                              File file,
-                                              String encryptionAlgo)
-            throws ProcessingException {
+    private int calculateChunkCount(long fileSize) {
+        return (int) Math.ceil((double) fileSize / chunkSize);
+    }
 
+    private List<ChunkMetadata> processChunks(String fileId, File file, String encryptionAlgo) throws ProcessingException {
         logger.debug("Processing chunks for file: {}", fileId);
-
         List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
-        byte[] buffer = new byte[CHUNK_SIZE];
-
+        byte[] buffer = new byte[chunkSize];
         try (FileInputStream fis = new FileInputStream(file)) {
             int chunkIndex = 0;
             int bytesRead;
-
             while ((bytesRead = fis.read(buffer)) > 0) {
-                logger.debug("Processing chunk: {}[{}] ({} bytes)",
-                        fileId, chunkIndex, bytesRead);
-
-                // Trim buffer to actual bytes read (last chunk may be smaller)
                 byte[] chunkData = new byte[bytesRead];
                 System.arraycopy(buffer, 0, chunkData, 0, bytesRead);
-
-                ChunkMetadata chunkMetadata = processSingleChunk(
-                        fileId,
-                        chunkIndex,
-                        chunkData,
-                        encryptionAlgo
-                );
-
+                ChunkMetadata chunkMetadata = processSingleChunk(fileId, chunkIndex, chunkData, encryptionAlgo);
                 chunkMetadataList.add(chunkMetadata);
                 chunkIndex++;
             }
-
-            logger.debug("✓ All chunks processed: {} ({} chunks)",
-                    fileId, chunkMetadataList.size());
+            logger.debug("✓ All chunks processed: {} ({} chunks)", fileId, chunkMetadataList.size());
             return chunkMetadataList;
-
         } catch (IOException e) {
-            logger.error("✗ Failed to read file: {}", e.getMessage(), e);
-            throw new ProcessingException(
-                    "Failed to read file: " + e.getMessage(),
-                    ErrorType.FILE_READ_ERROR,
-                    e
-            );
-        } catch (ProcessingException e) {
-            throw e;
-        } catch (Exception e) {
-            logger.error("✗ Unexpected error during chunking: {}", e.getMessage(), e);
-            throw new ProcessingException(
-                    "Unexpected error during chunking: " + e.getMessage(),
-                    ErrorType.PROCESSING_ERROR,
-                    e
-            );
+            throw new ProcessingException("Failed to read file: " + e.getMessage(), ErrorType.FILE_READ_ERROR, e);
         }
     }
 
-    /**
-     * Process a single chunk: CRC, encrypt, store, save metadata.
-     *
-     * Process:
-     * 1. Calculate CRC32 checksum of plaintext
-     * 2. Encrypt chunk with AES-256
-     * 3. Select storage server (round-robin)
-     * 4. Upload encrypted chunk via SFTP
-     * 5. Save chunk metadata to database
-     *
-     * @param fileId Unique file identifier
-     * @param chunkIndex Index of chunk in sequence
-     * @param chunkData Plaintext chunk data
-     * @param encryptionAlgo Encryption algorithm
-     * @return ChunkMetadata object
-     * @throws ProcessingException if chunk processing fails
-     */
-    private ChunkMetadata processSingleChunk(String fileId,
-                                             int chunkIndex,
-                                             byte[] chunkData,
-                                             String encryptionAlgo)
-            throws ProcessingException {
-
+    private ChunkMetadata processSingleChunk(String fileId, int chunkIndex, byte[] chunkData, String encryptionAlgo) throws ProcessingException {
         try {
-            // 1. Calculate CRC32 checksum of plaintext
             long crc32 = crcService.calculateCrc32(chunkData);
-            logger.debug("CRC32 calculated: {}[{}] = {}", fileId, chunkIndex, crc32);
-
-            // 2. Encrypt chunk
             byte[] encryptedData = encryptionService.encrypt(chunkData, encryptionAlgo);
-            logger.debug("Chunk encrypted: {}[{}] ({} → {} bytes)",
-                    fileId, chunkIndex, chunkData.length, encryptedData.length);
-
-            // 3. Select server and store chunk
             String serverHost = storageService.selectServer();
             String remotePath = storageService.storeChunk(serverHost, fileId, chunkIndex, encryptedData);
-            logger.debug("Chunk stored: {}[{}] @ {}:{}",
-                    fileId, chunkIndex, serverHost, remotePath);
-
-            // 4. Create and save chunk metadata
             ChunkMetadata chunkMetadata = new ChunkMetadata(
                     fileId,
                     chunkIndex,
@@ -494,71 +213,27 @@ public class FileProcessingService {
                     crc32,
                     LocalDateTime.now()
             );
-
             chunkRepo.save(chunkMetadata);
             logger.debug("✓ Chunk metadata saved: {}[{}]", fileId, chunkIndex);
-
             return chunkMetadata;
-
-        } catch (ProcessingException e) {
-            throw e;
         } catch (Exception e) {
-            logger.error("✗ Failed to process chunk: {}[{}] - {}", fileId, chunkIndex, e.getMessage(), e);
-            throw new ProcessingException(
-                    String.format("Failed to process chunk %d: %s", chunkIndex, e.getMessage()),
-                    ErrorType.PROCESSING_ERROR,
-                    e
-            );
+            throw new ProcessingException(String.format("Failed to process chunk %d: %s", chunkIndex, e.getMessage()), ErrorType.PROCESSING_ERROR, e);
         }
     }
 
-    /**
-     * Calculate number of chunks needed for file.
-     *
-     * Formula: ceil(fileSize / CHUNK_SIZE)
-     * Example: 15MB file = 3 chunks (5MB + 5MB + 5MB)
-     *
-     * @param fileSize Total file size in bytes
-     * @return Number of chunks needed
-     */
-    private int calculateChunkCount(long fileSize) {
-        return (int) Math.ceil((double) fileSize / CHUNK_SIZE);
-    }
-
-    /**
-     * Best-effort rollback after failed upload.
-     *
-     * Deletes:
-     * 1. All stored chunks from storage servers
-     * 2. All chunk metadata from database
-     * 3. File metadata from database
-     *
-     * Logs warnings if individual operations fail.
-     * Does NOT throw exceptions to allow caller to throw original error.
-     *
-     * @param fileId Unique file identifier to rollback
-     */
     private void rollbackFileUpload(String fileId) {
         logger.warn("Rolling back file upload: {}", fileId);
         try {
             List<ChunkMetadata> chunks = chunkRepo.findByFileIdOrderByChunkIndex(fileId);
-
-            // Delete chunks from storage servers
             for (ChunkMetadata chunk : chunks) {
                 try {
                     storageService.deleteChunk(chunk.getServerHost(), chunk.getRemotePath());
                 } catch (Exception e) {
-                    logger.warn("Failed to delete chunk during rollback: {}[{}]",
-                            fileId, chunk.getChunkIndex(), e);
+                    logger.warn("Failed to delete chunk during rollback: {}[{}]", fileId, chunk.getChunkIndex(), e);
                 }
             }
-
-            // Delete chunk metadata
             chunkRepo.deleteByFileId(fileId);
-
-            // Delete file metadata
             fileRepo.deleteById(fileId);
-
             logger.info("✓ Rollback completed: {}", fileId);
         } catch (Exception e) {
             logger.error("✗ Rollback failed: {}", e.getMessage(), e);
