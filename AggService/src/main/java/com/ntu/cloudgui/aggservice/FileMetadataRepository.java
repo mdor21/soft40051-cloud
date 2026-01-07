@@ -1,92 +1,84 @@
 package com.ntu.cloudgui.aggservice;
 
-import com.ntu.cloudgui.aggservice.model.FileMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.sql.*;
-import java.time.LocalDateTime;
 
 public class FileMetadataRepository {
 
     private static final Logger logger = LoggerFactory.getLogger(FileMetadataRepository.class);
-
     private final DatabaseManager databaseManager;
 
     public FileMetadataRepository(DatabaseManager databaseManager) {
         this.databaseManager = databaseManager;
     }
 
-    public void save(FileMetadata metadata) {
-        String sql = "INSERT INTO file_metadata (fileId, originalName, totalChunks, sizeBytes, encryptionAlgo) VALUES (?, ?, ?, ?, ?)";
+    public void save(FileMetadata fileMetadata) throws SQLException {
+        String sql = "INSERT INTO file_metadata (username, filename, file_size, file_path, created_at) VALUES (?, ?, ?, ?, ?)";
         Connection conn = null;
         try {
             conn = databaseManager.getConnection();
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, metadata.getFileId());
-                stmt.setString(2, metadata.getOriginalName());
-                stmt.setInt(3, metadata.getTotalChunks());
-                stmt.setLong(4, metadata.getSizeBytes());
-                stmt.setString(5, metadata.getEncryptionAlgo());
-                stmt.executeUpdate();
-                logger.info("File metadata saved: {}", metadata.getFileId());
+            try (PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                pstmt.setString(1, fileMetadata.getUsername());
+                pstmt.setString(2, fileMetadata.getFilename());
+                pstmt.setLong(3, fileMetadata.getFileSize());
+                pstmt.setString(4, fileMetadata.getFilePath());
+                pstmt.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
+
+                int affectedRows = pstmt.executeUpdate();
+
+                if (affectedRows > 0) {
+                    try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                        if (generatedKeys.next()) {
+                            fileMetadata.setId(generatedKeys.getLong(1));
+                        }
+                    }
+                }
+                logger.info("Saved file metadata for filename: {}", fileMetadata.getFilename());
             }
-        } catch (SQLException e) {
-            logger.error("Failed to save file metadata", e);
-            throw new RuntimeException(e);
         } finally {
             databaseManager.releaseConnection(conn);
         }
     }
 
-    public FileMetadata findById(String fileId) {
-        String sql = "SELECT * FROM file_metadata WHERE fileId = ?";
+    public FileMetadata findById(long id) throws SQLException {
+        String sql = "SELECT * FROM file_metadata WHERE id = ?";
+        FileMetadata fileMetadata = null;
         Connection conn = null;
         try {
             conn = databaseManager.getConnection();
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, fileId);
-                try (ResultSet rs = stmt.executeQuery()) {
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setLong(1, id);
+                try (ResultSet rs = pstmt.executeQuery()) {
                     if (rs.next()) {
-                        return mapResultSetToFileMetadata(rs);
+                        fileMetadata = new FileMetadata();
+                        fileMetadata.setId(rs.getLong("id"));
+                        fileMetadata.setUsername(rs.getString("username"));
+                        fileMetadata.setFilename(rs.getString("filename"));
+                        fileMetadata.setFileSize(rs.getLong("file_size"));
+                        fileMetadata.setFilePath(rs.getString("file_path"));
+                        fileMetadata.setCreatedAt(rs.getTimestamp("created_at"));
                     }
                 }
             }
-        } catch (SQLException e) {
-            logger.error("Failed to find file metadata", e);
-            throw new RuntimeException(e);
         } finally {
             databaseManager.releaseConnection(conn);
         }
-        return null;
+        return fileMetadata;
     }
 
-    public void deleteById(String fileId) {
-        String sql = "DELETE FROM file_metadata WHERE fileId = ?";
+    public void deleteById(long id) throws SQLException {
+        String sql = "DELETE FROM file_metadata WHERE id = ?";
         Connection conn = null;
         try {
             conn = databaseManager.getConnection();
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, fileId);
-                stmt.executeUpdate();
-                logger.info("File metadata deleted: {}", fileId);
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setLong(1, id);
+                pstmt.executeUpdate();
+                logger.info("Deleted file metadata for id: {}", id);
             }
-        } catch (SQLException e) {
-            logger.error("Failed to delete file metadata", e);
-            throw new RuntimeException(e);
         } finally {
             databaseManager.releaseConnection(conn);
         }
-    }
-
-    private FileMetadata mapResultSetToFileMetadata(ResultSet rs) throws SQLException {
-        return new FileMetadata(
-                rs.getString("fileId"),
-                rs.getString("originalName"),
-                rs.getInt("totalChunks"),
-                rs.getLong("sizeBytes"),
-                rs.getString("encryptionAlgo"),
-                rs.getTimestamp("uploadTimestamp").toLocalDateTime()
-        );
     }
 }

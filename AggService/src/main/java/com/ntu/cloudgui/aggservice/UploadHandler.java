@@ -3,61 +3,78 @@ package com.ntu.cloudgui.aggservice;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 public class UploadHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(UploadHandler.class);
-
     private final FileProcessingService fileProcessingService;
 
     public UploadHandler(FileProcessingService fileProcessingService) {
         this.fileProcessingService = fileProcessingService;
     }
 
-    public void handle(InputStream in, PrintWriter out, Map<String, String> headers) throws IOException {
+    public void handle(InputStream in, OutputStream out, Map<String, String> headers) throws IOException {
+        // 1. Validate headers
         String username = headers.get("USERNAME");
         String filename = headers.get("FILENAME");
+        String contentLengthStr = headers.get("CONTENT_LENGTH");
+
+        if (username == null || filename == null || contentLengthStr == null) {
+            sendError(out, "ERROR BAD_REQUEST Missing required headers");
+            return;
+        }
+
         long contentLength;
         try {
-            contentLength = Long.parseLong(headers.get("CONTENT_LENGTH"));
-        } catch (NumberFormatException e) {
-            out.println("ERROR BAD_REQUEST Invalid CONTENT_LENGTH");
-            return;
-        }
-
-        if (username == null || filename == null || contentLength <= 0) {
-            out.println("ERROR BAD_REQUEST Missing required headers");
-            return;
-        }
-
-        File tempFile = File.createTempFile("upload-", ".tmp");
-        try (FileOutputStream fos = new FileOutputStream(tempFile)) {
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            long totalBytesRead = 0;
-            while (totalBytesRead < contentLength && (bytesRead = in.read(buffer, 0, (int) Math.min(buffer.length, contentLength - totalBytesRead))) != -1) {
-                fos.write(buffer, 0, bytesRead);
-                totalBytesRead += bytesRead;
-            }
-
-            if (totalBytesRead != contentLength) {
-                out.println("ERROR BAD_REQUEST Incomplete file data");
+            contentLength = Long.parseLong(contentLengthStr);
+            if (contentLength <= 0) {
+                sendError(out, "ERROR BAD_REQUEST Invalid CONTENT_LENGTH");
                 return;
             }
+        } catch (NumberFormatException e) {
+            sendError(out, "ERROR BAD_REQUEST Malformed CONTENT_LENGTH");
+            return;
+        }
 
-            String fileId = fileProcessingService.processUpload(tempFile, "AES");
-            out.println("OK FILE_ID: " + fileId);
-        } catch (Exception e) {
-            logger.error("Error processing upload", e);
-            out.println("ERROR INTERNAL_SERVER_ERROR " + e.getMessage());
-        } finally {
-            tempFile.delete();
+        // 2. Read file data
+        byte[] fileData = new byte[(int) contentLength];
+        int totalBytesRead = 0;
+        int bytesRead;
+        while (totalBytesRead < contentLength && (bytesRead = in.read(fileData, totalBytesRead, (int) (contentLength - totalBytesRead))) != -1) {
+            totalBytesRead += bytesRead;
+        }
+
+        if (totalBytesRead != contentLength) {
+            sendError(out, "ERROR BAD_REQUEST Incomplete file data received");
+            return;
+        }
+
+        try {
+            long fileId = fileProcessingService.processAndStoreFile(filename, fileData, username);
+            sendSuccess(out, fileId);
+        } catch (ProcessingException e) {
+            logger.error("Error processing file '{}'", filename, e);
+            sendError(out, "ERROR INTERNAL_SERVER_ERROR " + e.getMessage());
+        }
+    }
+
+    private void sendSuccess(OutputStream out, long fileId) throws IOException {
+        String response = "OK FILE_ID: " + fileId + "\n";
+        out.write(response.getBytes(StandardCharsets.UTF_8));
+        out.flush();
+    }
+
+    private void sendError(OutputStream out, String errorMessage) {
+        try {
+            out.write((errorMessage + "\n").getBytes(StandardCharsets.UTF_8));
+            out.flush();
+        } catch (IOException e) {
+            logger.error("Failed to send error response to client", e);
         }
     }
 }
