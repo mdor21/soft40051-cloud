@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  aggservice:
+    build: .
+    container_name: aggservice-1
+    restart: on-failure
+    environment:
+      - DB_HOST=lamp-server
+      - DB_PORT=3306
+      - DB_NAME=soft40051_db
+      - DB_USER=user
+      - DB_PASS=password
+      - FILE_SERVER_HOSTS=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
+    ports:
+      - "8081:8080"
+    networks:
+      - soft40051_network
+
+networks:
+  soft40051_network:
+    external: true

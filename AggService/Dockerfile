@@ -1,21 +1,14 @@
-# Use an official Maven image to build and run the application
-FROM maven:3.9.6-eclipse-temurin-21
+# Use an official OpenJDK runtime as a parent image
+FROM openjdk:21-jdk-slim
 
-# Set the working directory
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy the pom.xml file and download dependencies
-COPY pom.xml .
-RUN mvn dependency:go-offline
+# Copy the fat JAR from the build stage
+COPY target/aggservice-1.0.0.jar /app/aggservice.jar
 
-# Copy the rest of the application's source code
-COPY src ./src
-
-# Build the application
-RUN mvn package
-
-# Expose the port the application runs on
+# Make port 8080 available to the world outside this container
 EXPOSE 8080
 
-# Run the application
-CMD ["java", "-jar", "target/aggservice-1.0.0.jar"]
+# Run the JAR file
+CMD ["java", "-jar", "aggservice.jar"]
