@@ -56,12 +56,15 @@ public class Configuration {
         dbPass = getProperty(props, "DB_PASS", "password");
 
         // Load AggService configuration
-        aggServicePort = Integer.parseInt(getProperty(props, "AGGSERVICE_PORT", "8080"));
+        aggServicePort = Integer.parseInt(getProperty(props, "AGGSERVICE_PORT", "9000"));
         threadPoolSize = Integer.parseInt(getProperty(props, "THREAD_POOL_SIZE", "10"));
 
         // Load file processing configuration
         chunkSize = Integer.parseInt(getProperty(props, "CHUNK_SIZE_BYTES", "1048576")); // 1MB default
-        encryptionKey = getProperty(props, "ENCRYPTION_KEY", "aVerySecretKey123"); // Default key for development ONLY
+        encryptionKey = getProperty(props, "ENCRYPTION_KEY", null);
+        if (encryptionKey == null) {
+            throw new IllegalStateException("ENCRYPTION_KEY environment variable not set.");
+        }
 
         // Load file server configuration
         String fileServers = getProperty(props, "FILE_SERVER_HOSTS", "soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4");

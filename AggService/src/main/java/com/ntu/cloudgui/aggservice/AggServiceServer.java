@@ -24,10 +24,12 @@ public class AggServiceServer {
         this.executorService = Executors.newFixedThreadPool(config.getThreadPoolSize());
 
         // Initialize core components
-        this.databaseManager = new Databaseмаnager(config);
+        this.databaseManager = new DatabaseManager(config);
         this.fileMetadataRepository = new FileMetadataRepository(databaseManager);
         ChunkMetadataRepository chunkMetadataRepository = new ChunkMetadataRepository(databaseManager);
+        LogEntryRepository logEntryRepository = new LogEntryRepository(databaseManager);
 
+        DatabaseLoggingService loggingService = new DatabaseLoggingService(logEntryRepository);
         EncryptionService encryptionService = new EncryptionService(config.getEncryptionKey());
         CrcValidationService crcValidationService = new CrcValidationService();
         Semaphore fileServerSemaphore = new Semaphore(config.getFileServerConnections(), true);
@@ -40,7 +42,8 @@ public class AggServiceServer {
             chunkStorageService,
             crcValidationService,
             fileMetadataRepository,
-            chunkMetadataRepository
+            chunkMetadataRepository,
+            loggingService
         );
     }
 
