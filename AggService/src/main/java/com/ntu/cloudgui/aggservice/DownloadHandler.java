@@ -42,7 +42,7 @@ public class DownloadHandler {
                 return;
             }
 
-            byte[] fileData = fileProcessingService.retrieveAndReassembleFile(fileId);
+            byte[] fileData = fileProcessingService.retrieveAndReassembleFile(fileId, fileMetadata.getUsername());
             sendSuccess(out, fileMetadata.getFilename(), fileData);
 
         } catch (ProcessingException e) {

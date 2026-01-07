@@ -19,22 +19,25 @@ public class FileProcessingService {
     private final CrcValidationService crcValidationService;
     private final FileMetadataRepository fileMetadataRepository;
     private final ChunkMetadataRepository chunkMetadataRepository;
+    private final DatabaseLoggingService loggingService;
     private final int chunkSize;
 
-    public FileProcessingService(Configuration config, EncryptionService encryptionService, ChunkStorageService chunkStorageService, CrcValidationService crcValidationService, FileMetadataRepository fileMetadataRepository, ChunkMetadataRepository chunkMetadataRepository) {
+    public FileProcessingService(Configuration config, EncryptionService encryptionService, ChunkStorageService chunkStorageService, CrcValidationService crcValidationService, FileMetadataRepository fileMetadataRepository, ChunkMetadataRepository chunkMetadataRepository, DatabaseLoggingService loggingService) {
         this.chunkSize = config.getChunkSize();
         this.encryptionService = encryptionService;
         this.chunkStorageService = chunkStorageService;
         this.crcValidationService = crcValidationService;
         this.fileMetadataRepository = fileMetadataRepository;
         this.chunkMetadataRepository = chunkMetadataRepository;
+        this.loggingService = loggingService;
     }
 
     public long processAndStoreFile(String filename, byte[] fileData, String username) throws ProcessingException {
+        long fileId = -1;
         try {
             // 1. Encrypt the entire file
             byte[] encryptedData = encryptionService.encrypt(fileData);
-            logger.debug("File encrypted successfully. Original size: {}, Encrypted size: {}", fileData.length, encryptedData.length);
+            loggingService.logEvent(username, "FILE_ENCRYPTION", "File '" + filename + "' encrypted successfully.", LogEntry.Status.SUCCESS);
 
             // 2. Save initial file metadata
             FileMetadata fileMetadata = new FileMetadata();
@@ -42,8 +45,8 @@ public class FileProcessingService {
             fileMetadata.setFileSize(fileData.length);
             fileMetadata.setUsername(username);
             fileMetadataRepository.save(fileMetadata);
-            long fileId = fileMetadata.getId();
-            logger.info("Saved initial metadata for file '{}' with ID: {}", filename, fileId);
+            fileId = fileMetadata.getId();
+            loggingService.logEvent(username, "METADATA_PERSIST", "Initial metadata for file ID " + fileId + " saved.", LogEntry.Status.SUCCESS);
 
             // 3. Chunk the encrypted data and process each chunk
             int chunkIndex = 0;
@@ -51,14 +54,9 @@ public class FileProcessingService {
                 int length = Math.min(chunkSize, encryptedData.length - offset);
                 byte[] chunkBytes = Arrays.copyOfRange(encryptedData, offset, offset + length);
 
-                // a. Compute CRC32 for the chunk
                 long crc32 = crcValidationService.calculateCrc32(chunkBytes);
-
-                // b. Store the chunk on a file server
                 String server = chunkStorageService.storeChunk(chunkBytes, fileId, chunkIndex);
-                logger.debug("Stored chunk {} for file ID {} on server {}", chunkIndex, fileId, server);
 
-                // c. Persist chunk metadata
                 ChunkMetadata chunkMetadata = new ChunkMetadata();
                 chunkMetadata.setFileId(fileId);
                 chunkMetadata.setChunkIndex(chunkIndex);
@@ -70,54 +68,72 @@ public class FileProcessingService {
 
                 chunkIndex++;
             }
-            logger.info("Successfully processed and stored {} chunks for file ID {}", chunkIndex, fileId);
+            loggingService.logEvent(username, "FILE_UPLOAD_COMPLETE", "File '" + filename + "' (ID: " + fileId + ") uploaded successfully.", LogEntry.Status.SUCCESS);
             return fileId;
 
-        } catch (SQLException e) {
-            logger.error("Database error during file processing for {}", filename, e);
-            // Consider implementing rollback logic here
-            throw new ProcessingException("Database failure while processing file", e);
+        } catch (SQLException | ProcessingException e) {
+            String errorMsg = "Failed to process and store file '" + filename + "'";
+            logger.error(errorMsg, e);
+            loggingService.logEvent(username, "FILE_UPLOAD_FAILURE", errorMsg + ": " + e.getMessage(), LogEntry.Status.FAILURE);
+            if (fileId != -1) {
+                rollbackFileCreation(fileId, username);
+            }
+            throw new ProcessingException(errorMsg, e);
         }
     }
 
-    public byte[] retrieveAndReassembleFile(long fileId) throws ProcessingException {
+    private void rollbackFileCreation(long fileId, String username) {
         try {
-            // 1. Retrieve chunk metadata
+            // Delete all chunks from file servers
+            List<ChunkMetadata> chunks = chunkMetadataRepository.findByFileIdOrderByChunkIndexAsc(fileId);
+            for (ChunkMetadata chunk : chunks) {
+                chunkStorageService.deleteChunk(chunk.getFileServerName(), fileId, chunk.getChunkIndex());
+            }
+
+            // Delete chunk metadata
+            chunkMetadataRepository.deleteByFileId(fileId);
+
+            // Delete file metadata
+            fileMetadataRepository.deleteById(fileId);
+
+            loggingService.logEvent(username, "ROLLBACK_SUCCESS", "Successfully rolled back file creation for file ID " + fileId, LogEntry.Status.SUCCESS);
+        } catch (SQLException | ProcessingException e) {
+            String errorMsg = "Failed to rollback file creation for file ID " + fileId;
+            logger.error(errorMsg, e);
+            loggingService.logEvent(username, "ROLLBACK_FAILURE", errorMsg + ": " + e.getMessage(), LogEntry.Status.FAILURE);
+        }
+    }
+
+    public byte[] retrieveAndReassembleFile(long fileId, String username) throws ProcessingException {
+        try {
             List<ChunkMetadata> chunkMetadatas = chunkMetadataRepository.findByFileIdOrderByChunkIndexAsc(fileId);
             if (chunkMetadatas.isEmpty()) {
                 throw new ProcessingException("File not found or has no associated chunks for ID: " + fileId);
             }
-            logger.debug("Found {} chunks for file ID {}", chunkMetadatas.size(), fileId);
 
-            // 2. Retrieve, validate, and concatenate chunks
             ByteArrayOutputStream reassembledEncryptedStream = new ByteArrayOutputStream();
             for (ChunkMetadata chunk : chunkMetadatas) {
-                // a. Retrieve chunk from file server
                 byte[] chunkBytes = chunkStorageService.retrieveChunk(chunk.getFileServerName(), fileId, chunk.getChunkIndex());
 
-                // b. Validate CRC32
                 if (!crcValidationService.validateCrc32(chunkBytes, chunk.getCrc32())) {
-                    throw new ProcessingException("CRC32 check failed for chunk " + chunk.getChunkIndex() + " of file ID " + fileId);
+                    String errorMsg = "CRC32 check failed for chunk " + chunk.getChunkIndex() + " of file ID " + fileId;
+                    loggingService.logEvent(username, "CRC32_VALIDATION_FAILURE", errorMsg, LogEntry.Status.FAILURE);
+                    throw new ProcessingException(errorMsg);
                 }
-                logger.debug("CRC32 validation passed for chunk {}", chunk.getChunkIndex());
 
-                // c. Append to stream
                 reassembledEncryptedStream.write(chunkBytes);
             }
 
-            // 3. Decrypt the reassembled data
-            byte[] reassembledEncryptedData = reassembledEncryptedStream.toByteArray();
-            byte[] decryptedData = encryptionService.decrypt(reassembledEncryptedData);
-            logger.info("Successfully retrieved and decrypted file ID {}", fileId);
+            byte[] decryptedData = encryptionService.decrypt(reassembledEncryptedStream.toByteArray());
+            loggingService.logEvent(username, "FILE_DOWNLOAD_COMPLETE", "File ID " + fileId + " retrieved successfully.", LogEntry.Status.SUCCESS);
 
             return decryptedData;
 
-        } catch (SQLException e) {
-            logger.error("Database error during file retrieval for ID: {}", fileId, e);
-            throw new ProcessingException("Database failure while retrieving file", e);
-        } catch (IOException e) {
-            logger.error("IO error during file reassembly for ID: {}", fileId, e);
-            throw new ProcessingException("Failed to reassemble file chunks", e);
+        } catch (SQLException | IOException | ProcessingException e) {
+            String errorMsg = "Failed to retrieve and reassemble file ID " + fileId;
+            logger.error(errorMsg, e);
+            loggingService.logEvent(username, "FILE_DOWNLOAD_FAILURE", errorMsg + ": " + e.getMessage(), LogEntry.Status.FAILURE);
+            throw new ProcessingException(errorMsg, e);
         }
     }
 }

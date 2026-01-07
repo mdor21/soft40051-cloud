@@ -1,9 +1,7 @@
 package com.ntu.cloudgui.aggservice;
 
-import com.ntu.cloudgui.aggservice.model.ChunkMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,88 +9,73 @@ import java.util.List;
 public class ChunkMetadataRepository {
 
     private static final Logger logger = LoggerFactory.getLogger(ChunkMetadataRepository.class);
-
     private final DatabaseManager databaseManager;
 
     public ChunkMetadataRepository(DatabaseManager databaseManager) {
         this.databaseManager = databaseManager;
     }
 
-    public void save(ChunkMetadata metadata) {
-        String sql = "INSERT INTO chunk_metadata (fileId, chunkIndex, serverHost, remotePath, originalSize, encryptedSize, crc32) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    public void save(ChunkMetadata chunkMetadata) throws SQLException {
+        String sql = "INSERT INTO chunk_metadata (file_id, chunk_index, crc32, file_server_name, chunk_path, chunk_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
         Connection conn = null;
         try {
             conn = databaseManager.getConnection();
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, metadata.getFileId());
-                stmt.setInt(2, metadata.getChunkIndex());
-                stmt.setString(3, metadata.getServerHost());
-                stmt.setString(4, metadata.getRemotePath());
-                stmt.setLong(5, metadata.getOriginalSize());
-                stmt.setLong(6, metadata.getEncryptedSize());
-                stmt.setLong(7, metadata.getCrc32());
-                stmt.executeUpdate();
-                logger.info("Chunk metadata saved: {}[{}]", metadata.getFileId(), metadata.getChunkIndex());
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setLong(1, chunkMetadata.getFileId());
+                pstmt.setInt(2, chunkMetadata.getChunkIndex());
+                pstmt.setLong(3, chunkMetadata.getCrc32());
+                pstmt.setString(4, chunkMetadata.getFileServerName());
+                pstmt.setString(5, chunkMetadata.getChunkPath());
+                pstmt.setLong(6, chunkMetadata.getChunkSize());
+                pstmt.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
+                pstmt.executeUpdate();
+                logger.debug("Saved chunk metadata for fileId: {}, chunkIndex: {}", chunkMetadata.getFileId(), chunkMetadata.getChunkIndex());
             }
-        } catch (SQLException e) {
-            logger.error("Failed to save chunk metadata", e);
-            throw new RuntimeException(e);
         } finally {
             databaseManager.releaseConnection(conn);
         }
     }
 
-    public List<ChunkMetadata> findByFileIdOrderByChunkIndex(String fileId) {
-        String sql = "SELECT * FROM chunk_metadata WHERE fileId = ? ORDER BY chunkIndex";
+    public List<ChunkMetadata> findByFileIdOrderByChunkIndexAsc(long fileId) throws SQLException {
         List<ChunkMetadata> chunks = new ArrayList<>();
+        String sql = "SELECT * FROM chunk_metadata WHERE file_id = ? ORDER BY chunk_index ASC";
         Connection conn = null;
         try {
             conn = databaseManager.getConnection();
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, fileId);
-                try (ResultSet rs = stmt.executeQuery()) {
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setLong(1, fileId);
+                try (ResultSet rs = pstmt.executeQuery()) {
                     while (rs.next()) {
-                        chunks.add(mapResultSetToChunkMetadata(rs));
+                        ChunkMetadata chunk = new ChunkMetadata();
+                        chunk.setId(rs.getLong("id"));
+                        chunk.setFileId(rs.getLong("file_id"));
+                        chunk.setChunkIndex(rs.getInt("chunk_index"));
+                        chunk.setCrc32(rs.getLong("crc32"));
+                        chunk.setFileServerName(rs.getString("file_server_name"));
+                        chunk.setChunkPath(rs.getString("chunk_path"));
+                        chunk.setChunkSize(rs.getLong("chunk_size"));
+                        chunks.add(chunk);
                     }
                 }
             }
-        } catch (SQLException e) {
-            logger.error("Failed to find chunk metadata", e);
-            throw new RuntimeException(e);
         } finally {
             databaseManager.releaseConnection(conn);
         }
         return chunks;
     }
 
-    public void deleteByFileId(String fileId) {
-        String sql = "DELETE FROM chunk_metadata WHERE fileId = ?";
+    public void deleteByFileId(long fileId) throws SQLException {
+        String sql = "DELETE FROM chunk_metadata WHERE file_id = ?";
         Connection conn = null;
         try {
             conn = databaseManager.getConnection();
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, fileId);
-                stmt.executeUpdate();
-                logger.info("Chunk metadata deleted for fileId: {}", fileId);
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setLong(1, fileId);
+                int affectedRows = pstmt.executeUpdate();
+                logger.info("Deleted {} chunk metadata records for fileId: {}", affectedRows, fileId);
             }
-        } catch (SQLException e) {
-            logger.error("Failed to delete chunk metadata", e);
-            throw new RuntimeException(e);
         } finally {
             databaseManager.releaseConnection(conn);
         }
-    }
-
-    private ChunkMetadata mapResultSetToChunkMetadata(ResultSet rs) throws SQLException {
-        return new ChunkMetadata(
-                rs.getString("fileId"),
-                rs.getInt("chunkIndex"),
-                rs.getString("serverHost"),
-                rs.getString("remotePath"),
-                rs.getLong("originalSize"),
-                rs.getLong("encryptedSize"),
-                rs.getLong("crc32"),
-                rs.getTimestamp("createdAt").toLocalDateTime()
-        );
     }
 }

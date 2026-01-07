@@ -1,22 +1,22 @@
 version: '3.8'
 
 services:
-  aggservice:
+  aggregator:
     build: ./AggService
-    ports:
-      - "8080:8080"
+    container_name: aggregator
+    restart: on-failure
     environment:
       - DB_HOST=lamp-server
       - DB_PORT=3306
-      - DB_NAME=cloud_db
-      - DB_USER=root
+      - DB_NAME=soft40051_db
+      - DB_USER=user
       - DB_PASS=password
       - FILE_SERVER_HOSTS=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
-      - AGGSERVICE_PORT=8080
-      - CHUNK_SIZE=1024
+      - AGGSERVICE_PORT=9000
       - SFTP_USER=user
-      - SFTP_PASS=pass
-      - SFTP_TIMEOUT=30000
+      - SFTP_PASS=password
+    ports:
+      - "9000:9000"
     networks:
       - soft40051_network
 
@@ -26,6 +26,9 @@ services:
       - "3306:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=soft40051_db
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
     volumes:
       - lamp-data:/var/lib/mysql
     networks:
