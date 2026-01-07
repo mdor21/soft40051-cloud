@@ -189,7 +189,7 @@ public class MainLb {
         String nodesEnv = System.getenv("STORAGE_NODES");
         if (nodesEnv == null || nodesEnv.trim().isEmpty()) {
             // Fallback to a default if the environment variable is not set.
-            nodesEnv = "aggservice-1:8080,aggservice-2:8080";
+            nodesEnv = "aggservice-1:9000,aggservice-2:9000";
             System.out.printf("[Main] WARNING: STORAGE_NODES env var not set. Falling back to default: %s%n", nodesEnv);
         }
 
