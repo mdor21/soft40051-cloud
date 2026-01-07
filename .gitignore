@@ -1,18 +1,42 @@
-# Maven
+# Environment and secrets
+.env
+*.key
+*.pem
+
+# Docker volumes
+mysql-data/
+storage-node*/
+jenkins-data/
+gitea-data/
+
+# Java build artifacts
 target/
 *.jar
 *.class
+*.war
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
 
 # Logs
 *.log
+logs/
 
 # OS files
 .DS_Store
+Thumbs.db
 
-# IDE
-.idea/
-.vscode/
-*.iml
+# Maven
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+dependency-reduced-pom.xml
 
-# Env
-.env
+# SQLite local cache
+*.db
+*.sqlite

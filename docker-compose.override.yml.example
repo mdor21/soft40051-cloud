@@ -1,0 +1,20 @@
+# Copy to docker-compose.override.yml for local development customizations
+version: '3.8'
+
+services:
+  ntu-vm-soft40051:
+    volumes:
+      - ./debug-logs:/logs
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+
+  load-balancer:
+    environment:
+      - SIMULATED_LATENCY_MIN=0.5
+      - SIMULATED_LATENCY_MAX=2.0
+
+  aggregator:
+    environment:
+      - CHUNK_SIZE_MB=10
+      - MAX_CONCURRENT_UPLOADS=4

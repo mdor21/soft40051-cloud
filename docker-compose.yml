@@ -1,69 +1,223 @@
 version: '3.8'
 
 services:
-  aggregator:
-    build: ./AggService
-    container_name: aggregator
-    restart: on-failure
-    environment:
-      - DB_HOST=lamp-server
-      - DB_PORT=3306
-      - DB_NAME=soft40051_db
-      - DB_USER=user
-      - DB_PASS=password
-      - FILE_SERVER_HOSTS=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
-      - AGGSERVICE_PORT=9000
-      - SFTP_USER=user
-      - SFTP_PASS=password
+  # Main Application / GUI
+  ntu-vm-soft40051:
+    image: pedrombmachado/ntu_lubuntu:soft40051
+    container_name: ntu-vm-soft40051
     ports:
-      - "9000:9000"
+      - "3390:3389"  # RDP
+      - "2022:22"    # SSH
     networks:
       - soft40051_network
+    volumes:
+      - ./app:/workspace
+      - ./config:/config
+    environment:
+      - DISPLAY=:1
+      - LOAD_BALANCER_HOST=load-balancer
+      - LOAD_BALANCER_PORT=6869
+    depends_on:
+      - load-balancer
+      - lamp-server
+      - mqtt-broker
+    restart: unless-stopped
 
+  # Load Balancer
+  load-balancer:
+    image: pedrombmachado/ntu_lubuntu:soft40051
+    container_name: load-balancer
+    expose:
+      - "6869"
+    networks:
+      - soft40051_network
+    volumes:
+      - ./load-balancer:/app
+    environment:
+      - AGGREGATOR_HOST=aggregator
+      - AGGREGATOR_PORT=9000
+      - MQTT_BROKER_HOST=mqtt-broker
+      - MQTT_BROKER_PORT=1883
+    command: java -jar /app/load-balancer.jar
+    depends_on:
+      - aggregator
+      - mqtt-broker
+    restart: unless-stopped
+
+  # Aggregator Service
+  aggregator:
+    image: pedrombmachado/ntu_lubuntu:soft40051
+    container_name: aggregator
+    expose:
+      - "9000"
+    networks:
+      - soft40051_network
+    volumes:
+      - ./aggregator:/app
+      - ./storage:/storage
+    environment:
+      - MYSQL_HOST=lamp-server
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=dbtutorial
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=password
+      - STORAGE_NODE_1=soft40051-files-container1:22
+      - STORAGE_NODE_2=soft40051-files-container2:22
+      - STORAGE_NODE_3=soft40051-files-container3:22
+      - STORAGE_NODE_4=soft40051-files-container4:22
+    command: java -jar /app/aggregator.jar
+    depends_on:
+      - lamp-server
+      - soft40051-files-container1
+      - soft40051-files-container2
+      - soft40051-files-container3
+      - soft40051-files-container4
+    restart: unless-stopped
+
+  # MySQL Server (LAMP Stack)
   lamp-server:
     image: mattrayner/lamp:latest-1804
+    container_name: lamp-server
     ports:
       - "3306:3306"
-    environment:
-      - MYSQL_ROOT_PASSWORD=password
-      - MYSQL_DATABASE=soft40051_db
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=password
-    volumes:
-      - lamp-data:/var/lib/mysql
+      - "8080:80"  # phpMyAdmin
     networks:
       - soft40051_network
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./db-init:/docker-entrypoint-initdb.d
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=dbtutorial
+    restart: unless-stopped
 
+  # MQTT Broker
+  mqtt-broker:
+    image: pedrombmachado/mqtt:base
+    container_name: mqtt-broker
+    ports:
+      - "1883:1883"
+    networks:
+      - soft40051_network
+    volumes:
+      - ./mqtt/config:/mosquitto/config
+      - mqtt-data:/mosquitto/data
+      - mqtt-logs:/mosquitto/log
+    restart: unless-stopped
+
+  # Storage Node 1
   soft40051-files-container1:
     image: pedrombmachado/simple-ssh-container:base
+    container_name: soft40051-files-container1
     ports:
       - "4848:22"
     networks:
       - soft40051_network
+    volumes:
+      - storage-node1:/data
+    environment:
+      - SSH_USER=storageuser
+      - SSH_PASSWORD=secure_pass_1
+    restart: unless-stopped
 
+  # Storage Node 2
   soft40051-files-container2:
     image: pedrombmachado/simple-ssh-container:base
+    container_name: soft40051-files-container2
     ports:
       - "4849:22"
     networks:
       - soft40051_network
+    volumes:
+      - storage-node2:/data
+    environment:
+      - SSH_USER=storageuser
+      - SSH_PASSWORD=secure_pass_2
+    restart: unless-stopped
 
+  # Storage Node 3
   soft40051-files-container3:
     image: pedrombmachado/simple-ssh-container:base
+    container_name: soft40051-files-container3
     ports:
       - "4850:22"
     networks:
       - soft40051_network
+    volumes:
+      - storage-node3:/data
+    environment:
+      - SSH_USER=storageuser
+      - SSH_PASSWORD=secure_pass_3
+    restart: unless-stopped
 
+  # Storage Node 4
   soft40051-files-container4:
     image: pedrombmachado/simple-ssh-container:base
+    container_name: soft40051-files-container4
     ports:
       - "4851:22"
     networks:
       - soft40051_network
+    volumes:
+      - storage-node4:/data
+    environment:
+      - SSH_USER=storageuser
+      - SSH_PASSWORD=secure_pass_4
+    restart: unless-stopped
+
+  # Jenkins CI/CD
+  jenkins-soft40051:
+    image: jenkins/jenkins:latest
+    container_name: jenkins-soft40051
+    ports:
+      - "8081:8080"
+      - "50001:50000"
+    networks:
+      - soft40051_network
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - ./jenkins:/jenkins-config
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+    restart: unless-stopped
+
+  # Gitea Version Control
+  gitea:
+    image: gitea/gitea:latest
+    container_name: gitea
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    networks:
+      - soft40051_network
+    volumes:
+      - gitea-data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=mysql
+      - GITEA__database__HOST=lamp-server:3306
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=root
+      - GITEA__database__PASSWD=password
+    depends_on:
+      - lamp-server
+    restart: unless-stopped
 
 networks:
   soft40051_network:
+    driver: bridge
+    name: soft40051_network
 
 volumes:
-  lamp-data:
+  mysql-data:
+  mqtt-data:
+  mqtt-logs:
+  storage-node1:
+  storage-node2:
+  storage-node3:
+  storage-node4:
+  jenkins-data:
+  gitea-data:
