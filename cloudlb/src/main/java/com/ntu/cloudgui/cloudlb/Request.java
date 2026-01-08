@@ -65,6 +65,23 @@ public class Request implements Comparable<Request> {
     }
 
     /**
+     * FOR TESTING ONLY: Create a new file operation request with a specific creation time.
+     *
+     * @param id Unique file identifier (UUID recommended)
+     * @param type Request type (UPLOAD or DOWNLOAD)
+     * @param sizeBytes File size in bytes
+     * @param priority Priority level (0 = highest, used for scheduling)
+     * @param creationTimeMs The creation time in milliseconds since the epoch.
+     */
+    public Request(String id, Type type, long sizeBytes, int priority, long creationTimeMs) {
+        this.id = id;
+        this.type = type;
+        this.sizeBytes = sizeBytes;
+        this.createdTimeMs = creationTimeMs;
+        this.priority = priority;
+    }
+
+    /**
      * Get the unique request/file identifier.
      *
      * @return File ID
@@ -214,17 +231,17 @@ public class Request implements Comparable<Request> {
      */
     private double calculatePriorityScore() {
         // These constants should ideally be configurable
-        final int AGING_THRESHOLD_MS = 5000;  // 5 seconds
-        final double AGING_PRIORITY_BOOST = 1.5; // 50% boost per 5s
+        final double AGE_SCORE_FACTOR = 0.01; // Subtract this value from score per millisecond of age
 
         double baseScore = this.getSizeMB();
         long ageMs = this.getAgeMs();
 
-        long agingIntervals = ageMs / AGING_THRESHOLD_MS;
-        double agingFactor = Math.pow(AGING_PRIORITY_BOOST, agingIntervals);
+        // The score is the size in MB minus a factor of its age.
+        // This ensures that over time, any large job will eventually
+        // have a lower score (higher priority) than a new, smaller job.
+        double agingPenalty = ageMs * AGE_SCORE_FACTOR;
 
-        // Add a small epsilon to the factor to avoid division by zero for new requests
-        return baseScore / (agingFactor + 1e-9);
+        return baseScore - agingPenalty;
     }
 
     public long getCreationTime() {
