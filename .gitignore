@@ -50,6 +50,12 @@ Thumbs.db
 # ======================
 # Test / cache / temp files
 # ======================
+**/src/test/
 *.db
 *.sqlite
-cloud-gui/src/test/
+*.swp
+*.swo
+.cache/
+*.zip
+*.tar
+*.tar.gz
