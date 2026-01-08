@@ -1,11 +1,14 @@
 package com.ntu.cloudgui.app.model;
 
+import java.sql.Timestamp;
+
 public class User {
 
     private Long id;
     private String username;
     private String passwordHash;
     private Role role;
+    private Timestamp lastModified;
 
     public Long getId() {
         return id;
@@ -39,6 +42,14 @@ public class User {
         this.role = role;
     }
 
+    public Timestamp getLastModified() {
+        return lastModified;
+    }
+
+    public void setLastModified(Timestamp lastModified) {
+        this.lastModified = lastModified;
+    }
+
     // Optional: helpful for logging/debugging
     @Override
     public String toString() {
@@ -46,6 +57,7 @@ public class User {
                 "id=" + id +
                 ", username='" + username + '\'' +
                 ", role=" + role +
+                ", lastModified=" + lastModified +
                 '}';
     }
 }

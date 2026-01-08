@@ -32,7 +32,8 @@ public class SessionCacheRepository {
                 "  username TEXT UNIQUE NOT NULL," +
                 "  password TEXT NOT NULL," +
                 "  role TEXT NOT NULL," +
-                "  last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                "  last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                "  last_modified TIMESTAMP" +
                 ")"
             );
 
@@ -45,7 +46,7 @@ public class SessionCacheRepository {
                 "  size_bytes INTEGER," +
                 "  sync_status TEXT," +
                 "  local_path TEXT," +
-                "  last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                "  last_modified TIMESTAMP" +
                 ")"
             );
 

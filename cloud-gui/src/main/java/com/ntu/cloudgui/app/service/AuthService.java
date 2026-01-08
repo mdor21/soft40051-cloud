@@ -80,7 +80,11 @@ public class AuthService {
         try {
             if (online) {
                 userRepo.save(u);
-                sessionCacheRepo.cacheUser(u); // Keep cache in sync
+                // After saving, re-fetch to get the server-generated timestamp
+                User savedUser = userRepo.findByUsername(username);
+                if (savedUser != null) {
+                    sessionCacheRepo.cacheUser(savedUser);
+                }
                 logger.log(getCurrentUsername(), "CREATE_USER", "Created user " + username, true);
             } else {
                 // Offline: queue the creation
@@ -104,14 +108,25 @@ public class AuthService {
         boolean online = DatabaseManager.isMysqlConnected();
 
         try {
-            if (online) {
-                userRepo.deleteByUsername(username);
-                // Also remove from cache if exists
-                logger.log(getCurrentUsername(), "DELETE_USER", "Deleted user " + username, true);
-            } else {
-                String payload = "{\"username\":\"" + username + "\"}";
-                sessionCacheRepo.queueOperation("DELETE", "USER", username, payload);
-                logger.log(getCurrentUsername(), "DELETE_USER_OFFLINE", "Queued deletion for user " + username, true);
+            User target = online ? userRepo.findByUsername(username) : null;
+            if (target == null && !online) {
+                 // Offline, we don't have the full user object, but we can queue the delete.
+                 // The sync service will need to handle potential conflicts (e.g., if the user was modified).
+                 String payload = "{\"username\":\"" + username + "\"}";
+                 sessionCacheRepo.queueOperation("DELETE", "USER", username, payload);
+                 logger.log(getCurrentUsername(), "DELETE_USER_OFFLINE", "Queued deletion for user " + username, true);
+                 return;
+            }
+
+            if (target != null) {
+                 if (online) {
+                    userRepo.deleteByUsername(username);
+                    logger.log(getCurrentUsername(), "DELETE_USER", "Deleted user " + username, true);
+                 } else {
+                    String payload = gson.toJson(target);
+                    sessionCacheRepo.queueOperation("DELETE", "USER", username, payload);
+                    logger.log(getCurrentUsername(), "DELETE_USER_OFFLINE", "Queued deletion for user " + username, true);
+                 }
             }
         } catch (Exception e) {
             logger.log(getCurrentUsername(), "DELETE_USER_ERROR", e.getMessage(), false);
@@ -127,21 +142,26 @@ public class AuthService {
         boolean online = DatabaseManager.isMysqlConnected();
 
         try {
-            User target;
-            if (online) {
-                target = userRepo.findByUsername(username);
-                 if (target != null) {
-                    target.setRole(newRole);
+            User target = online ? userRepo.findByUsername(username) : sessionCacheRepo.findCachedUserByUsername(username);
+
+            if (target != null) {
+                target.setRole(newRole);
+                if (online) {
                     userRepo.save(target);
-                    sessionCacheRepo.cacheUser(target); // Update cache
+                    User updatedUser = userRepo.findByUsername(username); // Re-fetch to get new timestamp
+                    if (updatedUser != null) {
+                        sessionCacheRepo.cacheUser(updatedUser);
+                        // Update session state if the current user was modified
+                        if (SessionState.getInstance().getCurrentUser().getUsername().equals(username)) {
+                            SessionState.getInstance().setCurrentUser(updatedUser);
+                        }
+                    }
                     logger.log(getCurrentUsername(), "CHANGE_ROLE", "Changed role of " + username + " to " + newRole, true);
+                } else {
+                    String payload = gson.toJson(target);
+                    sessionCacheRepo.queueOperation("UPDATE", "USER", username, payload);
+                    logger.log(getCurrentUsername(), "CHANGE_ROLE_OFFLINE", "Queued role change for user " + username, true);
                 }
-            } else {
-                 // Offline, we can't fetch the user, so we queue the operation based on what we know.
-                 // The payload needs enough info for the sync service to perform the update.
-                String payload = "{\"username\":\"" + username + "\", \"role\":\"" + newRole.name() + "\"}";
-                sessionCacheRepo.queueOperation("UPDATE", "USER", username, payload);
-                logger.log(getCurrentUsername(), "CHANGE_ROLE_OFFLINE", "Queued role change for user " + username, true);
             }
         } catch (Exception e) {
             logger.log(getCurrentUsername(), "CHANGE_ROLE_ERROR", e.getMessage(), false);
