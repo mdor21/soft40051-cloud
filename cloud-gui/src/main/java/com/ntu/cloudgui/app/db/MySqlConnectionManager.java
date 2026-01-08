@@ -9,7 +9,7 @@ public class MySqlConnectionManager {
     // Read database connection details from environment variables
     private static final String HOST = System.getenv().getOrDefault("DB_HOST", "lamp-server");
     private static final int    PORT = Integer.parseInt(System.getenv().getOrDefault("DB_PORT", "3306"));
-    private static final String DB   = System.getenv().getOrDefault("DB_NAME", "cloud_gui");
+    private static final String DB   = System.getenv().getOrDefault("DB_NAME", "dbtutorial");
     private static final String USER = System.getenv("DB_USER");
     private static final String PASS = System.getenv("DB_PASS");
 

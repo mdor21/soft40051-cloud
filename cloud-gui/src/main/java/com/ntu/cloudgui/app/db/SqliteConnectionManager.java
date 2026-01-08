@@ -7,7 +7,7 @@ import java.sql.SQLException;
 public class SqliteConnectionManager {
 
     // SQLite file inside main container (same directory where the app runs)
-    private static final String DB_FILE = "students.db";
+    private static final String DB_FILE = "comp20081.db";
 
     private static final String URL = "jdbc:sqlite:" + DB_FILE;
 
