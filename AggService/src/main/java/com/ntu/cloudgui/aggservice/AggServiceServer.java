@@ -32,8 +32,7 @@ public class AggServiceServer {
         DatabaseLoggingService loggingService = new DatabaseLoggingService(logEntryRepository);
         EncryptionService encryptionService = new EncryptionService(config.getEncryptionKey());
         CrcValidationService crcValidationService = new CrcValidationService();
-        Semaphore fileServerSemaphore = new Semaphore(config.getFileServerConnections(), true);
-        ChunkStorageService chunkStorageService = new ChunkStorageService(config, fileServerSemaphore);
+        ChunkStorageService chunkStorageService = new ChunkStorageService(config);
 
         // Initialize the main service orchestrator
         this.fileProcessingService = new FileProcessingService(
