@@ -1,13 +1,12 @@
 version: '3.8'
 
 services:
-  # Main Application / GUI
   ntu-vm-soft40051:
     image: pedrombmachado/ntu_lubuntu:soft40051
     container_name: ntu-vm-soft40051
     ports:
-      - "3390:3389"  # RDP
-      - "2022:22"    # SSH
+      - "3390:3389"
+      - "2022:22"
     networks:
       - soft40051_network
     volumes:
@@ -16,26 +15,25 @@ services:
     environment:
       - DISPLAY=:1
       - LOAD_BALANCER_HOST=load-balancer
-      - LOAD_BALANCER_PORT=6869
+      - LOAD_BALANCER_PORT=${LB_PORT}
     depends_on:
       - load-balancer
       - lamp-server
       - mqtt-broker
     restart: unless-stopped
 
-  # Load Balancer
   load-balancer:
     image: pedrombmachado/ntu_lubuntu:soft40051
     container_name: load-balancer
     expose:
-      - "6869"
+      - "${LB_PORT}"
     networks:
       - soft40051_network
     volumes:
       - ./load-balancer:/app
     environment:
       - AGGREGATOR_HOST=aggregator
-      - AGGREGATOR_PORT=9000
+      - AGGREGATOR_PORT=${AGG_PORT}
       - MQTT_BROKER_HOST=mqtt-broker
       - MQTT_BROKER_PORT=1883
     command: java -jar /app/load-balancer.jar
@@ -44,12 +42,11 @@ services:
       - mqtt-broker
     restart: unless-stopped
 
-  # Aggregator Service
   aggregator:
     image: pedrombmachado/ntu_lubuntu:soft40051
     container_name: aggregator
     expose:
-      - "9000"
+      - "${AGG_PORT}"
     networks:
       - soft40051_network
     volumes:
@@ -60,9 +57,9 @@ services:
     environment:
       - MYSQL_HOST=lamp-server
       - MYSQL_PORT=3306
-      - MYSQL_DATABASE=dbtutorial
-      - MYSQL_USER=soft40051
-      - MYSQL_PASSWORD=cloud2024
+      - MYSQL_DATABASE=${MYSQL_DB}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - STORAGE_NODES=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
       - SFTP_USER=root
     depends_on:
@@ -73,26 +70,25 @@ services:
       - soft40051-files-container4
     restart: unless-stopped
 
-  # MySQL Database
   lamp-server:
-    image: mysql:8.0
+    image: mattrayner/lamp:latest-1804
     container_name: lamp-server
     ports:
       - "3306:3306"
     networks:
       - soft40051_network
     environment:
-      - MYSQL_ROOT_PASSWORD=admin
-      - MYSQL_DATABASE=dbtutorial
-      - MYSQL_USER=soft40051
-      - MYSQL_PASSWORD=cloud2024
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DB}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
     volumes:
-      - ./db-init:/docker-entrypoint-initdb.d
+      - ./infra/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./mysql-data:/var/lib/mysql
     restart: unless-stopped
 
-  # MQTT Broker
   mqtt-broker:
-    image: eclipse-mosquitto:2
+    image: pedrombmachado/mqtt:base
     container_name: mqtt-broker
     ports:
       - "1883:1883"
@@ -101,7 +97,6 @@ services:
       - soft40051_network
     restart: unless-stopped
 
-  # Storage Nodes
   soft40051-files-container1:
     image: lscr.io/linuxserver/openssh-server:latest
     container_name: soft40051-files-container1
@@ -174,7 +169,6 @@ services:
       - ./storage/node4:/data
     restart: unless-stopped
 
-  # Jenkins CI/CD
   jenkins-soft40051:
     image: jenkins/jenkins:lts
     container_name: jenkins-soft40051
@@ -187,7 +181,6 @@ services:
       - ./jenkins_home:/var/jenkins_home
     restart: unless-stopped
 
-  # Gitea Version Control
   gitea:
     image: gitea/gitea:latest
     container_name: gitea
