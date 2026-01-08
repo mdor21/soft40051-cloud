@@ -1,7 +1,7 @@
 package com.ntu.cloudgui.app;
 
-import com.ntu.cloudgui.app.db.MySqlConnectionManager;
-import com.ntu.cloudgui.app.db.SessionCacheRepository;
+import com.ntu.cloudgui.app.db.DatabaseManager;
+import com.ntu.cloudgui.app.service.SyncService;
 import com.ntu.cloudgui.app.session.SessionState;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
@@ -9,32 +9,25 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
-import java.sql.Connection;
-import java.sql.SQLException;
-
 /**
  * Main entry point for the JavaFX GUI application.
- * 
- * CONNECTIVITY FLOW:
- * 1. Initializes local SQLite session cache for offline capability
- * 2. Tests remote MySQL connectivity (marks system as online/offline)
- * 3. Loads login UI from FXML
- * 4. Manages authentication and session state throughout application lifecycle
- * 
- * Connects to:
- * - MySQL Database (via MySqlConnectionManager) - port 3306 (internal Docker network)
- * - Local SQLite Database (offline session cache)
- * - Load Balancer (for file upload/download operations - to be integrated in FilesController)
  */
 public class MainApp extends Application {
 
+    private SyncService syncService;
+    private Thread syncThread;
+
     @Override
     public void start(Stage primaryStage) throws Exception {
-        // 1. Initialize local SQLite session cache schema
-        initLocalSessionCache();
+        // 1. Initialize databases and connectivity status
+        DatabaseManager.initializeDatabases();
 
-        // 2. Test remote MySQL connectivity (for online/offline decision)
-        testMySqlConnection();
+        // 2. Start the background synchronization service
+        syncService = new SyncService();
+        syncThread = new Thread(syncService);
+        syncThread.setDaemon(true); // Allows the app to exit even if this thread is running
+        syncThread.start();
+        System.out.println("SyncService started.");
 
         // 3. Load the login UI
         FXMLLoader loader = new FXMLLoader(
@@ -50,41 +43,25 @@ public class MainApp extends Application {
         primaryStage.setScene(scene);
         primaryStage.show();
 
-        // Existing in-memory default admin (you can later replace this with DB bootstrap)
+        // Existing in-memory default admin
         SessionState.getInstance().ensureDefaultAdmin();
     }
 
-    /**
-     * Initialize the local SQLite database schema for session caching.
-     * This allows the application to function in offline mode.
-     */
-    private void initLocalSessionCache() {
-        SessionCacheRepository repo = new SessionCacheRepository();
-        try {
-            repo.initSchema();
-            System.out.println("SQLite session cache initialised.");
-        } catch (SQLException e) {
-            System.err.println("Failed to initialise SQLite session cache: " + e.getMessage());
+    @Override
+    public void stop() throws Exception {
+        // 1. Stop the synchronization service
+        if (syncService != null) {
+            syncService.stop();
         }
-    }
+        if (syncThread != null) {
+            syncThread.interrupt(); // Interrupt the sleep to allow for a quick shutdown
+        }
+        System.out.println("SyncService stopped.");
 
-    /**
-     * Test connection to remote MySQL database.
-     * If connection fails, application operates in offline mode with local SQLite only.
-     * 
-     * CONNECTIVITY: MySQL Container
-     * - Host: mysql (service name in Docker network: soft40051_network)
-     * - Port: 3306 (internal Docker port)
-     * - Database: cloudgui_db
-     */
-    private void testMySqlConnection() {
-        try (Connection conn = MySqlConnectionManager.getConnection()) {
-            System.out.println("Connected to remote MySQL successfully.");
-            SessionState.getInstance().setOnline(true);
-        } catch (SQLException e) {
-            System.err.println("MySQL unavailable, application may run in offline mode: " + e.getMessage());
-            SessionState.getInstance().setOnline(false);
-        }
+        // 2. Close the MySQL database connection
+        DatabaseManager.closeMySqlConnection();
+
+        super.stop();
     }
 
     public static void main(String[] args) {
