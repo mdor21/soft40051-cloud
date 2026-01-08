@@ -25,6 +25,19 @@ public class AggServiceServer {
 
         // Initialize core components
         this.databaseManager = new DatabaseManager(config);
+
+        // Reset database schema before initializing the connection pool
+        try (java.sql.Connection schemaConnection = databaseManager.createDirectConnection()) {
+            SchemaManager schemaManager = new SchemaManager();
+            schemaManager.resetDatabaseSchema(schemaConnection);
+        } catch (java.sql.SQLException e) {
+            logger.error("Failed to apply database schema. Shutting down.", e);
+            System.exit(1); // Critical failure
+        }
+
+        // Now that the schema is ready, initialize the connection pool
+        databaseManager.initializePool();
+
         this.fileMetadataRepository = new FileMetadataRepository(databaseManager);
         ChunkMetadataRepository chunkMetadataRepository = new ChunkMetadataRepository(databaseManager);
         LogEntryRepository logEntryRepository = new LogEntryRepository(databaseManager);
