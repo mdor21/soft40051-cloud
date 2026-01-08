@@ -40,3 +40,4 @@ dependency-reduced-pom.xml
 # SQLite local cache
 *.db
 *.sqlite
+cloud-gui/src/test/
