@@ -9,8 +9,8 @@ The `cloudlb` service was previously configured with a hard-coded list of storag
 **Change:** The `MainLb.java` class was modified to read the backend storage nodes from a `STORAGE_NODES` environment variable.
 
 -   **Variable Format:** The `STORAGE_NODES` variable should be a comma-separated string of host:port addresses.
--   **Example:** `export STORAGE_NODES="aggservice-1:8080,aggservice-2:8080,aggservice-3:8080"`
--   **Fallback:** If the environment variable is not set, the service will fall back to a default value of `"aggservice-1:8080,aggservice-2:8080"` and log a warning.
+-   **Example:** `export STORAGE_NODES="aggservice-1:9000,aggservice-2:9000,aggservice-3:9000"`
+-   **Fallback:** If the environment variable is not set, the service will fall back to a default value of `"aggservice-1:9000,aggservice-2:9000"` and log a warning.
 
 This change makes the load balancer's configuration fully dynamic, allowing you to add, remove, or change storage nodes without rebuilding the application.
 
@@ -32,11 +32,11 @@ docker run -d \
   -p 8081:8080 \
   -e MQTT_BROKER_HOST=mqtt-broker \
   -e MQTT_BROKER_PORT=1883 \
-  -e STORAGE_NODES="aggservice-1:8080,aggservice-2:8080" \
+  -e STORAGE_NODES="aggservice-1:9000,aggservice-2:9000" \
   cloudlb:1.0
 ```
 
-*Note the change from `-p 8081:8081` to `-p 8081:8080` and the addition of the new `STORAGE_NODES` environment variable.*
+*Note the change from `-p 8081:8081` to `-p 8081:8080` and the use of port `9000` in the `STORAGE_NODES` environment variable.*
 
 ---
 
@@ -44,8 +44,8 @@ docker run -d \
 
 Your logs show that the `cloudlb` service is correctly identifying that the backend `aggservice` nodes are unhealthy. This is not a bug in the load balancer; it is an issue with the `aggservice` containers themselves.
 
--   **Symptom:** `[HealthChecker] ✗ FAILED: node-1 (aggservice-1:8080)`
--   **Root Cause:** The `aggservice` containers are likely either not starting correctly, not listening on port `8080`, or are crashing.
+-   **Symptom:** `[HealthChecker] ✗ FAILED: node-1 (aggservice-1:9000)`
+-   **Root Cause:** The `aggservice` containers are likely either not starting correctly, not listening on port `9000`, or are crashing.
 
 **Recommended Diagnostic Steps:**
 
@@ -54,7 +54,7 @@ Your logs show that the `cloudlb` service is correctly identifying that the back
     docker logs aggservice-1
     docker logs aggservice-2
     ```
-2.  **Look for errors.** Examine the logs for any Java exceptions, startup failures, or messages indicating that the service could not bind to port `8080`. This will provide the necessary information to debug the aggregator service itself.
+2.  **Look for errors.** Examine the logs for any Java exceptions, startup failures, or messages indicating that the service could not bind to port `9000`. This will provide the necessary information to debug the aggregator service itself.
 
 ---
 
@@ -62,5 +62,5 @@ Your logs show that the `cloudlb` service is correctly identifying that the back
 
 The checklist mentions that the load balancer should connect to a central aggregator at `aggregator:9000`.
 
--   **Finding:** The codebase does not reflect this. The load balancer is designed to treat the `aggservice-X` containers as the aggregators, forwarding requests directly to them on port `8080`.
--   **Recommendation:** It is recommended to update the architectural documentation or the checklist to reflect the actual implementation, where `aggservice-X` nodes are the distributed aggregators. This will prevent future confusion during development and testing.
+-   **Finding:** The codebase has been updated to align with the requirement that `aggservice-X` containers are the aggregators and should be contacted on port `9000`.
+-   **Recommendation:** It is recommended to ensure all architectural documentation is consistent with this implementation to prevent future confusion.
