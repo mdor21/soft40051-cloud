@@ -1,43 +1,55 @@
+# ======================
 # Environment and secrets
+# ======================
 .env
 *.key
 *.pem
 
-# Docker volumes
+# ======================
+# Docker volumes / local data
+# ======================
 mysql-data/
 storage-node*/
 jenkins-data/
 gitea-data/
+docker-compose.override.yml
 
-# Java build artifacts
+# ======================
+# Java / Maven build artifacts
+# ======================
 target/
-*.jar
+**/target/
 *.class
+*.jar
 *.war
+dependency-reduced-pom.xml
 
-# IDE files
+# ======================
+# IDE files / metadata
+# ======================
 .idea/
 *.iml
 .vscode/
 .project
 .classpath
 .settings/
+nbactions.xml
 
+# ======================
 # Logs
+# ======================
 *.log
 logs/
 
+# ======================
 # OS files
+# ======================
 .DS_Store
 Thumbs.db
 
-# Maven
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-dependency-reduced-pom.xml
-
-# SQLite local cache
+# ======================
+# Test / cache / temp files
+# ======================
 *.db
 *.sqlite
 cloud-gui/src/test/
