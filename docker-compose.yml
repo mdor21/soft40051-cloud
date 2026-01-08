@@ -83,7 +83,6 @@ services:
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
     volumes:
-      - ./infra/schema.sql:/docker-entrypoint-initdb.d/schema.sql
       - ./mysql-data:/var/lib/mysql
     restart: unless-stopped
 

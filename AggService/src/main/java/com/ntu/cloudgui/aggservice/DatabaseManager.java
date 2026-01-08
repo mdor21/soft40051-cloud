@@ -27,10 +27,20 @@ public class DatabaseManager {
         this.dbUser = config.getDbUser();
         this.dbPass = config.getDbPass();
         this.connectionPool = new LinkedBlockingQueue<>(MAX_POOL_SIZE);
-        initializePool();
+        // Pool is now initialized manually after schema reset
     }
 
-    private void initializePool() {
+    /**
+     * Creates a single, direct database connection, bypassing the pool.
+     * This is intended for administrative tasks like schema initialization.
+     * @return A direct database connection.
+     * @throws SQLException if a database access error occurs.
+     */
+    public Connection createDirectConnection() throws SQLException {
+        return DriverManager.getConnection(jdbcUrl, dbUser, dbPass);
+    }
+
+    public void initializePool() {
         try {
             for (int i = 0; i < MAX_POOL_SIZE; i++) {
                 Connection connection = createConnection();
