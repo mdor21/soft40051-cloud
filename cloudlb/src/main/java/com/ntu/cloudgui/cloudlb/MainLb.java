@@ -29,11 +29,11 @@ public class MainLb {
     // Configuration constants
     private static final int DEFAULT_NODE_COUNT = 2;
     private static final String DEFAULT_SCHEDULER = "ROUNDROBIN";
-    private static final int API_SERVER_PORT = 8080;
+    private static final int API_SERVER_PORT = 6869;
     private static final int HEALTH_CHECK_INTERVAL_MS = 5000;  // 5 seconds
     private static final int SCALING_CHECK_INTERVAL_MS = 10000; // 10 seconds
     private static final String MQTT_CLIENT_ID = "cloudlb";
-    private static final String MQTT_TOPIC = "lb/scale/request";
+    private static final String MQTT_TOPIC = "traffic/progress";
 
 
     /**
