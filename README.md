@@ -12,7 +12,7 @@ This is a high-security distributed file storage system simulating a global logi
 | Load Balancer | load-balancer | 6869 | N/A | Multi-threaded task scheduling |
 | Aggregator | aggregator | 9000 | N/A | Security and file processing |
 | MySQL | lamp-server | 3306 | 3306 | Metadata and logs |
-| MQTT Broker | mqtt-broker | 1883 | 1883 | Scaling and monitoring |
+| MQTT Broker | mqtt-broker | 1883, 9001 | 1883, 9001 | Scaling and monitoring |
 | Storage Node 1-4 | soft40051-files-container[1-4] | 22 | 4848-4851 | Encrypted chunk storage |
 | Jenkins | jenkins-soft40051 | 8080, 50000 | 8081, 50001 | CI/CD automation |
 | Gitea | gitea | 3000, 22 | 3000, 2222 | Version control |
@@ -40,17 +40,17 @@ cp .env.example .env
 
 3. **Start all services:**
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 4. **Verify services are running:**
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
 5. **Check logs:**
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### Access Points
