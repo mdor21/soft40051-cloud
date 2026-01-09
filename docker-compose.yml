@@ -1,75 +1,7 @@
 version: '3.8'
 
 services:
-  ntu-vm-soft40051:
-    image: pedrombmachado/ntu_lubuntu:soft40051
-    container_name: ntu-vm-soft40051
-    ports:
-      - "3390:3389"
-      - "2022:22"
-    networks:
-      - soft40051_network
-    volumes:
-      - ./app:/workspace
-      - ./config:/config
-    environment:
-      - DISPLAY=:1
-      - LOAD_BALANCER_HOST=load-balancer
-      - LOAD_BALANCER_PORT=${LB_PORT}
-    depends_on:
-      - load-balancer
-      - lamp-server
-      - mqtt-broker
-    restart: unless-stopped
-
-  load-balancer:
-    image: pedrombmachado/ntu_lubuntu:soft40051
-    container_name: load-balancer
-    expose:
-      - "${LB_PORT}"
-    networks:
-      - soft40051_network
-    volumes:
-      - ./load-balancer:/app
-    environment:
-      - AGGREGATOR_HOST=aggregator
-      - AGGREGATOR_PORT=${AGG_PORT}
-      - MQTT_BROKER_HOST=mqtt-broker
-      - MQTT_BROKER_PORT=1883
-    command: java -jar /app/load-balancer.jar
-    depends_on:
-      - aggregator
-      - mqtt-broker
-    restart: unless-stopped
-
-  aggregator:
-    image: pedrombmachado/ntu_lubuntu:soft40051
-    container_name: aggregator
-    expose:
-      - "${AGG_PORT}"
-    networks:
-      - soft40051_network
-    volumes:
-      - ./aggregator:/app
-      - ./storage:/storage
-    env_file:
-      - ./.env
-    environment:
-      - MYSQL_HOST=lamp-server
-      - MYSQL_PORT=3306
-      - MYSQL_DATABASE=${MYSQL_DB}
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - STORAGE_NODES=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
-      - SFTP_USER=root
-    depends_on:
-      - lamp-server
-      - soft40051-files-container1
-      - soft40051-files-container2
-      - soft40051-files-container3
-      - soft40051-files-container4
-    restart: unless-stopped
-
+  # Database - Core dependency
   lamp-server:
     image: mattrayner/lamp:latest-1804
     container_name: lamp-server
@@ -83,11 +15,17 @@ services:
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
     volumes:
-      - ./mysql-data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
+      - ./db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
     restart: unless-stopped
 
+  # MQTT Broker
   mqtt-broker:
-    image: pedrombmachado/mqtt:base
+    image: eclipse-mosquitto:2
     container_name: mqtt-broker
     ports:
       - "1883:1883"
@@ -96,11 +34,78 @@ services:
       - soft40051_network
     volumes:
       - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mqtt_data:/mosquitto/data
     restart: unless-stopped
 
-  soft40051-files-container1:
+  # Build Aggregator from source
+  aggregator:
+    build:
+      context: ./AggService
+      dockerfile: ../Dockerfile.agg
+    container_name: aggregator
+    expose:
+      - "${AGG_PORT}"
+    ports:
+      - "${AGG_PORT}:${AGG_PORT}"
+    networks:
+      - soft40051_network
+    volumes:
+      - ./storage:/storage
+    env_file:
+      - ./.env
+    environment:
+      - MYSQL_HOST=lamp-server
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DB}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - STORAGE_NODES=sftp-node1,sftp-node2,sftp-node3,sftp-node4
+      - SFTP_USER=root
+      - SERVER_PORT=${AGG_PORT}
+    depends_on:
+      lamp-server:
+        condition: service_healthy
+      mqtt-broker:
+        condition: service_started
+      sftp-node1:
+        condition: service_started
+      sftp-node2:
+        condition: service_started
+      sftp-node3:
+        condition: service_started
+      sftp-node4:
+        condition: service_started
+    restart: unless-stopped
+
+  # Build Load Balancer from source
+  load-balancer:
+    build:
+      context: ./cloudlb
+      dockerfile: ../Dockerfile.lb
+    container_name: load-balancer
+    expose:
+      - "${LB_PORT}"
+    ports:
+      - "${LB_PORT}:${LB_PORT}"
+    networks:
+      - soft40051_network
+    env_file:
+      - ./.env
+    environment:
+      - AGGREGATOR_HOST=aggregator
+      - AGGREGATOR_PORT=${AGG_PORT}
+      - MQTT_BROKER_HOST=mqtt-broker
+      - MQTT_BROKER_PORT=1883
+      - SERVER_PORT=${LB_PORT}
+    depends_on:
+      - aggregator
+      - mqtt-broker
+    restart: unless-stopped
+
+  # SFTP Storage Nodes
+  sftp-node1:
     image: lscr.io/linuxserver/openssh-server:latest
-    container_name: soft40051-files-container1
+    container_name: sftp-node1
     ports:
       - "4848:22"
     networks:
@@ -116,9 +121,9 @@ services:
       - ./storage/node1:/data
     restart: unless-stopped
 
-  soft40051-files-container2:
+  sftp-node2:
     image: lscr.io/linuxserver/openssh-server:latest
-    container_name: soft40051-files-container2
+    container_name: sftp-node2
     ports:
       - "4849:22"
     networks:
@@ -134,9 +139,9 @@ services:
       - ./storage/node2:/data
     restart: unless-stopped
 
-  soft40051-files-container3:
+  sftp-node3:
     image: lscr.io/linuxserver/openssh-server:latest
-    container_name: soft40051-files-container3
+    container_name: sftp-node3
     ports:
       - "4850:22"
     networks:
@@ -152,9 +157,9 @@ services:
       - ./storage/node3:/data
     restart: unless-stopped
 
-  soft40051-files-container4:
+  sftp-node4:
     image: lscr.io/linuxserver/openssh-server:latest
-    container_name: soft40051-files-container4
+    container_name: sftp-node4
     ports:
       - "4851:22"
     networks:
@@ -170,18 +175,20 @@ services:
       - ./storage/node4:/data
     restart: unless-stopped
 
-  jenkins-soft40051:
+  # Optional: Jenkins for CI/CD
+  jenkins:
     image: jenkins/jenkins:lts
-    container_name: jenkins-soft40051
+    container_name: jenkins
     ports:
       - "8081:8080"
-      - "50001:50000"
+      - "50000:50000"
     networks:
       - soft40051_network
     volumes:
-      - ./jenkins_home:/var/jenkins_home
+      - jenkins_data:/var/jenkins_home
     restart: unless-stopped
 
+  # Optional: Gitea for Git hosting
   gitea:
     image: gitea/gitea:latest
     container_name: gitea
@@ -191,9 +198,15 @@ services:
     networks:
       - soft40051_network
     volumes:
-      - ./gitea:/data
+      - gitea_data:/data
     restart: unless-stopped
 
 networks:
   soft40051_network:
     driver: bridge
+
+volumes:
+  mysql_data:
+  mqtt_data:
+  jenkins_data:
+  gitea_data:
