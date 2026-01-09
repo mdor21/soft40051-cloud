@@ -1,6 +1,6 @@
 com/ntu/cloudgui/cloudlb/core/StorageNode.class
-com/ntu/cloudgui/cloudlb/core/RoundRobinDistributionScheduler.class
 com/ntu/cloudgui/cloudlb/LoadBalancerAPIServer.class
+com/ntu/cloudgui/cloudlb/core/RoundRobinDistributionScheduler.class
 com/ntu/cloudgui/cloudlb/LoadBalancerAPIServer$HealthHandler.class
 com/ntu/cloudgui/cloudlb/Request.class
 com/ntu/cloudgui/cloudlb/LoadBalancerClient.class

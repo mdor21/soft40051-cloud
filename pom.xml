@@ -257,4 +257,9 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>ie.ntu.soft
+                    <mainClass>ie.ntu.soft40051.CloudSimulationApp</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
