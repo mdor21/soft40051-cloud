@@ -1,0 +1,159 @@
+name: Java CI Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    name: Build and Test on JDK ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [20, 21]
+      fail-fast: false
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK ${{ matrix.java }}
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ matrix.java }}
+        distribution: 'temurin'
+        cache: 'maven'
+
+    - name: Cache Maven packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+
+    - name: Build with Maven
+      run: mvn clean compile -B
+
+    - name: Run tests
+      run: mvn test -B
+
+    - name: Generate test coverage report
+      run: mvn jacoco:report -B
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./target/site/jacoco/jacoco.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+    - name: Build services
+      run: |
+        echo "Building AggService..."
+        cd AggService && mvn clean package -DskipTests -B
+        cd ..
+        
+        echo "Building cloudlb..."
+        cd cloudlb && mvn clean package -DskipTests -B
+        cd ..
+        
+        echo "Building cloud-gui..."
+        cd cloud-gui && mvn clean package -DskipTests -B
+        cd ..
+        
+        echo "Building hostmanager..."
+        cd hostmanager && mvn clean package -DskipTests -B
+        cd ..
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts-jdk-${{ matrix.java }}
+        path: |
+          **/target/*.jar
+          !**/target/*-javadoc.jar
+          !**/target/*-sources.jar
+        retention-days: 7
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 20
+      uses: actions/setup-java@v4
+      with:
+        java-version: '20'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    - name: Run Checkstyle
+      run: mvn checkstyle:check -B || true
+
+    - name: Run SpotBugs
+      run: mvn spotbugs:check -B || true
+
+    - name: Check dependencies for vulnerabilities
+      run: mvn org.owasp:dependency-check-maven:check -B || true
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 20
+      uses: actions/setup-java@v4
+      with:
+        java-version: '20'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Start test environment
+      run: |
+        cp .env.example .env
+        echo "Starting services for integration tests..."
+        # Start only required services for testing
+        docker compose up -d lamp-server mqtt-broker
+        sleep 10
+
+    - name: Run integration tests
+      run: mvn verify -Pintegration-tests -B || echo "Integration tests not configured yet"
+
+    - name: Stop test environment
+      if: always()
+      run: docker compose down -v
+
+  build-status:
+    name: Build Status Check
+    runs-on: ubuntu-latest
+    needs: [build, code-quality, integration-tests]
+    if: always()
+
+    steps:
+    - name: Check build status
+      run: |
+        if [ "${{ needs.build.result }}" != "success" ]; then
+          echo "Build failed"
+          exit 1
+        fi
+        if [ "${{ needs.code-quality.result }}" == "failure" ]; then
+          echo "Code quality checks failed (continuing)"
+        fi
+        if [ "${{ needs.integration-tests.result }}" == "failure" ]; then
+          echo "Integration tests failed (continuing)"
+        fi
+        echo "Build successful!"

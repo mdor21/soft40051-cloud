@@ -1,0 +1,111 @@
+# EditorConfig helps maintain consistent coding styles across different editors and IDEs
+# See https://editorconfig.org for more information
+
+root = true
+
+# Default settings for all files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Java source files
+[*.java]
+indent_style = space
+indent_size = 4
+max_line_length = 120
+continuation_indent_size = 8
+
+# XML files (POM, config files)
+[*.xml]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# YAML files (Docker Compose, GitHub Actions)
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# JSON files
+[*.json]
+indent_style = space
+indent_size = 2
+
+# Markdown files
+[*.md]
+max_line_length = off
+trim_trailing_whitespace = false
+
+# Shell scripts
+[*.sh]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+
+# Batch scripts
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# Docker files
+[Dockerfile*]
+indent_style = space
+indent_size = 2
+
+# Properties files
+[*.properties]
+indent_style = space
+indent_size = 2
+charset = utf-8
+
+# SQL files
+[*.sql]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# JavaScript files (if any)
+[*.{js,jsx}]
+indent_style = space
+indent_size = 2
+max_line_length = 100
+
+# CSS files (if any)
+[*.{css,scss,sass,less}]
+indent_style = space
+indent_size = 2
+
+# HTML files
+[*.html]
+indent_style = space
+indent_size = 2
+
+# FXML files (JavaFX)
+[*.fxml]
+indent_style = space
+indent_size = 2
+
+# Configuration files
+[{.gitignore,.gitattributes,.editorconfig}]
+indent_style = space
+indent_size = 2
+
+# Maven wrapper
+[mvnw]
+end_of_line = lf
+
+[mvnw.cmd]
+end_of_line = crlf
+
+# Makefile
+[{Makefile,makefile,*.mk}]
+indent_style = tab
+
+# Ignore generated files
+[{package-lock.json,yarn.lock,*.min.js,*.min.css}]
+insert_final_newline = unset
+trim_trailing_whitespace = unset
