@@ -40,6 +40,16 @@ jobs:
     - name: Run tests
       run: mvn test -B
 
+    - name: Run service-specific tests
+      run: |
+        echo "Running AggService tests..."
+        cd AggService && mvn test -B
+        echo "Running cloudlb tests..."
+        cd ../cloudlb && mvn test -B
+        echo "Running hostmanager tests..."
+        cd ../hostmanager && mvn test -B
+        echo "All service tests completed!"
+
     - name: Generate test coverage report
       run: mvn jacoco:report -B
 
@@ -68,6 +78,16 @@ jobs:
         echo "Building hostmanager..."
         cd hostmanager && mvn clean package -DskipTests -B
         cd ..
+
+    - name: Post-Merge Service Health Check
+      run: |
+        echo "Running service health verification..."
+        bash scripts/ci/service-health-check.sh
+
+    - name: Post-Merge Component Connectivity Test
+      run: |
+        echo "Running component connectivity verification..."
+        bash scripts/ci/component-connectivity-test.sh
 
     - name: Archive build artifacts
       uses: actions/upload-artifact@v3

@@ -50,7 +50,6 @@ Thumbs.db
 # ======================
 # Test / cache / temp files
 # ======================
-**/src/test/
 *.db
 *.sqlite
 *.swp
