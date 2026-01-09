@@ -215,12 +215,37 @@ cd hostmanager && mvn clean package
 # Run all tests
 mvn test
 
+# Run service-specific tests
+cd AggService && mvn test      # 4 tests
+cd cloudlb && mvn test          # 20 tests
+cd hostmanager && mvn test      # 9 tests
+
 # Run with coverage
 mvn clean test jacoco:report
 
 # Run integration tests
 mvn verify
 ```
+
+### Post-Merge Verification
+
+After any pull or merge operation, verify that all services and components are functional:
+
+```bash
+# Build all services
+bash scripts/build-all.sh
+
+# Run service health checks
+bash scripts/ci/service-health-check.sh
+
+# Run component connectivity tests
+bash scripts/ci/component-connectivity-test.sh
+
+# Run all tests
+bash scripts/run-tests.sh
+```
+
+See [Post-Merge Verification Guide](docs/POST_MERGE_VERIFICATION.md) for detailed testing information.
 
 ### Code Quality
 
