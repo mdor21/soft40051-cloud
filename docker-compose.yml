@@ -94,6 +94,8 @@ services:
       - "9001:9001"
     networks:
       - soft40051_network
+    volumes:
+      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
     restart: unless-stopped
 
   soft40051-files-container1:
