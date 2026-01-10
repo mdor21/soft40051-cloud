@@ -72,6 +72,30 @@
                     <mainClass>com.ntu.cloudgui.app.MainApp</mainClass>
                 </configuration>
             </plugin>
+            <!-- Maven Shade Plugin - Create Fat JAR with all dependencies -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Main class for executable JAR -->
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.ntu.cloudgui.app.MainApp</mainClass>
+                                </transformer>
+                            </transformers>
+                            <!-- Output JAR name -->
+                            <finalName>cloud-gui-1.0-SNAPSHOT</finalName>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

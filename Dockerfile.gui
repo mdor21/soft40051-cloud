@@ -1,0 +1,33 @@
+# Stage 1: Build the JavaFX application using Maven
+FROM maven:3.9-eclipse-temurin-21 AS build
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the pom.xml and the source code
+COPY cloud-gui/pom.xml ./pom.xml
+COPY cloud-gui/src ./src
+
+# Build the application, creating a fat JAR
+RUN mvn -f pom.xml clean package
+
+
+# Stage 2: Create the runtime image
+FROM eclipse-temurin:21-jre-jammy
+
+# Set the working directory
+WORKDIR /app
+
+# Install necessary dependencies for JavaFX and X11 forwarding
+RUN apt-get update && apt-get install -y \
+    libgtk-3-0 \
+    libx11-xcb1 \
+    libxtst6 \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy the fat JAR from the build stage
+COPY --from=build /app/target/cloud-gui-1.0-SNAPSHOT.jar ./app.jar
+
+# Set the entrypoint to run the JavaFX application
+ENTRYPOINT ["java", "-jar", "app.jar"]
