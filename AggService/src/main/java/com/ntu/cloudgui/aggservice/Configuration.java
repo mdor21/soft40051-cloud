@@ -49,14 +49,14 @@ public class Configuration {
         }
 
         // Load database configuration
-        dbHost = getProperty(props, "DB_HOST", "lamp-server");
-        dbPort = Integer.parseInt(getProperty(props, "DB_PORT", "3306"));
-        dbName = getProperty(props, "DB_NAME", "soft40051_db");
-        dbUser = getProperty(props, "DB_USER", "user");
-        dbPass = getProperty(props, "DB_PASS", "password");
+        dbHost = getProperty(props, "MYSQL_HOST", "lamp-server");
+        dbPort = Integer.parseInt(getProperty(props, "MYSQL_PORT", "3306"));
+        dbName = getProperty(props, "MYSQL_DATABASE", "dbtutorial");
+        dbUser = getProperty(props, "MYSQL_USER", "admin");
+        dbPass = getProperty(props, "MYSQL_PASSWORD", "admin");
 
         // Load AggService configuration
-        aggServicePort = Integer.parseInt(getProperty(props, "AGGSERVICE_PORT", "9000"));
+        aggServicePort = Integer.parseInt(getProperty(props, "SERVER_PORT", "9000"));
         threadPoolSize = Integer.parseInt(getProperty(props, "THREAD_POOL_SIZE", "10"));
 
         // Load file processing configuration
@@ -67,7 +67,7 @@ public class Configuration {
         }
 
         // Load file server configuration
-        String fileServers = getProperty(props, "FILE_SERVER_HOSTS", "soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4");
+        String fileServers = getProperty(props, "STORAGE_NODES", "soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4");
         fileServerHosts = Arrays.stream(fileServers.split(","))
                                 .map(String::trim)
                                 .collect(Collectors.toList());

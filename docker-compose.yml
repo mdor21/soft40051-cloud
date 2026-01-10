@@ -4,9 +4,9 @@ services:
   # JavaFX user portal; RDP/SSH
   ntu-vm-soft40051:
     container_name: ntu-vm-soft40051
-    # TODO: Replace 'your-custom-gui-image:latest' with the actual, functional Docker image for the JavaFX GUI application.
-    # The 'hello-world' image is a temporary placeholder to ensure the file is syntactically valid.
-    image: hello-world
+    build:
+      context: .
+      dockerfile: Dockerfile.gui
     ports:
       - "3390:3389" # RDP
       - "2022:22"   # SSH
@@ -22,6 +22,8 @@ services:
       - "3306:3306"
     networks:
       - soft40051_network
+    env_file:
+      - ./.env
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_DATABASE=${MYSQL_DB}
@@ -58,8 +60,6 @@ services:
     container_name: aggregator
     expose:
       - "${AGG_PORT}"
-    ports:
-      - "${AGG_PORT}:${AGG_PORT}"
     networks:
       - soft40051_network
     volumes:
@@ -75,6 +75,7 @@ services:
       - STORAGE_NODES=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
       - SFTP_USER=ntu-user
       - SERVER_PORT=${AGG_PORT}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     depends_on:
       lamp-server:
         condition: service_healthy
@@ -98,8 +99,6 @@ services:
     container_name: load-balancer
     expose:
       - "${LB_PORT}"
-    ports:
-      - "${LB_PORT}:${LB_PORT}"
     networks:
       - soft40051_network
     env_file:
