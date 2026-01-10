@@ -12,6 +12,7 @@ public class DockerCommandBuilder {
 
     public DockerCommandBuilder() {
         this.command = new ArrayList<>();
+        this.command.add("sudo");
         this.command.add("docker");
     }
 
