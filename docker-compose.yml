@@ -33,7 +33,7 @@ services:
     networks:
       - soft40051_network
     volumes:
-      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./mqtt/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - mqtt_data:/mosquitto/data
     restart: unless-stopped
 
