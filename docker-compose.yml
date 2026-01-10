@@ -4,14 +4,14 @@ services:
   # JavaFX user portal; RDP/SSH
   ntu-vm-soft40051:
     container_name: ntu-vm-soft40051
-    build:
-      context: .
-      dockerfile: Dockerfile.gui
+    image: pedrombmachado/ntu_lubuntu:soft40051
     ports:
-      - "3390:3389" # RDP
-      - "2022:22"   # SSH
+      - "3390:3389"   # RDP
+      - "2022:22"     # SSH
     networks:
       - soft40051_network
+    volumes:
+      - docker_soft40051:/home/ntu-user/NetBeansProjects
     restart: unless-stopped
 
   # Database - Core dependency
@@ -31,7 +31,7 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./db:/docker-entrypoint-initdb.d
+      - ./config/mysql:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 20s
@@ -218,6 +218,7 @@ networks:
     driver: bridge
 
 volumes:
+  docker_soft40051:
   mysql_data:
   mqtt_data:
   jenkins_data:
