@@ -43,8 +43,8 @@ services:
     image: eclipse-mosquitto:2
     container_name: mqtt-broker
     ports:
-      - "1883:1883" # Internal MQTT
-      - "9001:9001" # External MQTT for Host Manager
+      - "1883:1883" # Mapped to host for Host Manager access
+      - "9001:9001" # Mapped to host for external tools (optional)
     networks:
       - soft40051_network
     volumes:
@@ -216,6 +216,7 @@ services:
 networks:
   soft40051_network:
     driver: bridge
+    name: soft40051_network
 
 volumes:
   docker_soft40051:
