@@ -12,7 +12,7 @@ public class UserRepository {
     public User findByUsername(String username) throws Exception {
         try (Connection conn = MySqlConnectionManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT id, username, password, role, last_modified FROM users WHERE username = ?")) {
+                     "SELECT id, username, password, role, last_modified FROM User_Profiles WHERE username = ?")) {
             stmt.setString(1, username);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
@@ -34,7 +34,7 @@ public class UserRepository {
             if (user.getId() == null) {
                 // Insert new user
                 try (PreparedStatement stmt = conn.prepareStatement(
-                        "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                        "INSERT INTO User_Profiles (username, password, role) VALUES (?, ?, ?)",
                         Statement.RETURN_GENERATED_KEYS)) {
                     stmt.setString(1, user.getUsername());
                     stmt.setString(2, user.getPasswordHash());
@@ -49,7 +49,7 @@ public class UserRepository {
             } else {
                 // Update existing user
                 try (PreparedStatement stmt = conn.prepareStatement(
-                        "UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?")) {
+                        "UPDATE User_Profiles SET username = ?, password = ?, role = ? WHERE id = ?")) {
                     stmt.setString(1, user.getUsername());
                     stmt.setString(2, user.getPasswordHash());
                     stmt.setString(3, user.getRole().name());
@@ -64,7 +64,7 @@ public class UserRepository {
         List<User> users = new ArrayList<>();
         try (Connection conn = MySqlConnectionManager.getConnection();
              Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT id, username, password, role, last_modified FROM users")) {
+             ResultSet rs = stmt.executeQuery("SELECT id, username, password, role, last_modified FROM User_Profiles")) {
             while (rs.next()) {
                 User u = new User();
                 u.setId(rs.getLong("id"));
@@ -80,7 +80,7 @@ public class UserRepository {
 
     public void deleteByUsername(String username) throws Exception {
         try (Connection conn = MySqlConnectionManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("DELETE FROM users WHERE username = ?")) {
+             PreparedStatement stmt = conn.prepareStatement("DELETE FROM User_Profiles WHERE username = ?")) {
             stmt.setString(1, username);
             stmt.executeUpdate();
         }
