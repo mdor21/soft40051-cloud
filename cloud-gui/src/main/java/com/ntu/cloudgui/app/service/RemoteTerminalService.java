@@ -13,6 +13,9 @@ public class RemoteTerminalService {
         Session session = jsch.getSession(user, host, port);
         session.setPassword(password);
         session.setConfig("StrictHostKeyChecking", "no");
+        // Force password auth for the storage nodes' SSH config.
+        session.setConfig("PreferredAuthentications", "password,keyboard-interactive");
+        session.setConfig("PubkeyAuthentication", "no");
         session.connect(5000);
 
         ChannelExec channel = (ChannelExec) session.openChannel("exec");

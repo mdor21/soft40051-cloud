@@ -8,7 +8,7 @@ import java.util.List;
 public class LocalTerminalService {
 
     private static final List<String> ALLOWED = List.of(
-            "mv", "cp", "ls", "mkdir", "ps", "whoami", "tree", "nano"
+            "mv", "cp", "ls", "mkdir", "ps", "whoami", "tree", "nano", "pwd"
     );
 
     public String execute(String commandLine) throws IOException, InterruptedException {
