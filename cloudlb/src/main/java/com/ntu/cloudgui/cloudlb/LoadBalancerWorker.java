@@ -8,7 +8,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,11 +50,16 @@ public class LoadBalancerWorker implements Runnable {
     private static final long LATENCY_MIN_MS = 1000;  // 1 second
     private static final long LATENCY_MAX_MS = 5000;  // 5 seconds
     private static final int HTTP_TIMEOUT_MS = 30000; // 30 seconds
+    private static final int LOG_TIMEOUT_MS = 5000;
 
     private final RequestQueue requestQueue;
     private final NodeRegistry nodeRegistry;
     private final Scheduler scheduler;
     private final Map<String, Semaphore> nodeLocks = new ConcurrentHashMap<>();
+    private final long latencyMinMs;
+    private final long latencyMaxMs;
+    private final String logHost;
+    private final int logPort;
 
     /**
      * Create a new LoadBalancerWorker.
@@ -67,6 +74,10 @@ public class LoadBalancerWorker implements Runnable {
         this.requestQueue = requestQueue;
         this.nodeRegistry = nodeRegistry;
         this.scheduler = scheduler;
+        this.latencyMinMs = readLongEnv("LB_DELAY_MS_MIN", LATENCY_MIN_MS);
+        this.latencyMaxMs = Math.max(latencyMinMs, readLongEnv("LB_DELAY_MS_MAX", LATENCY_MAX_MS));
+        this.logHost = System.getenv().getOrDefault("AGGREGATOR_HOST", "aggregator");
+        this.logPort = readIntEnv("LB_LOG_PORT", 9100);
     }
 
     /**
@@ -176,10 +187,11 @@ public class LoadBalancerWorker implements Runnable {
     private boolean forwardToNode(StorageNode node, Request request) {
         try {
             // Implement artificial latency (1-5 seconds)
-            long latencyMs = LATENCY_MIN_MS + 
-                            (long)(Math.random() * (LATENCY_MAX_MS - LATENCY_MIN_MS));
+            long latencyMs = latencyMinMs +
+                            (long)(Math.random() * (latencyMaxMs - latencyMinMs));
             
             System.out.printf("[LB Worker] Simulating latency: %d ms%n", latencyMs);
+            logTaskScheduled(request, node, latencyMs);
             Thread.sleep(latencyMs);
 
             // Forward based on request type
@@ -222,18 +234,29 @@ public class LoadBalancerWorker implements Runnable {
 
             System.out.printf("[LB Worker] Uploading to: %s%n", url);
 
+            FileBufferStore.FilePayload payload = FileBufferStore.take(request.getId());
+            if (payload == null || payload.getContent() == null) {
+                System.err.printf("[LB Worker] Upload error: no payload for %s%n", request.getId());
+                return false;
+            }
+
             // Make HTTP POST request
             HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(HTTP_TIMEOUT_MS);
             connection.setReadTimeout(HTTP_TIMEOUT_MS);
             connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/octet-stream");
+            connection.setRequestProperty("X-File-ID", request.getId());
+            if (payload.getFileName() != null && !payload.getFileName().isBlank()) {
+                connection.setRequestProperty("X-File-Name", payload.getFileName());
+            }
+            connection.setRequestProperty("X-File-Size", String.valueOf(payload.getContent().length));
 
             try {
-                // Send dummy file content
+                // Send file content
                 try (OutputStream os = connection.getOutputStream()) {
-                    byte[] dummyContent = new byte[(int) Math.min(request.getSizeBytes(), 1024)];
-                    os.write(dummyContent);
+                    os.write(payload.getContent());
                     os.flush();
                 }
 
@@ -330,5 +353,72 @@ public class LoadBalancerWorker implements Runnable {
         return String.format("LoadBalancerWorker{queue_size=%d, healthy_nodes=%d}",
             requestQueue.size(),
             nodeRegistry.getHealthyNodes().size());
+    }
+
+    private void logTaskScheduled(Request request, StorageNode node, long latencyMs) {
+        String description = String.format(
+            "Task Scheduled: id=%s type=%s sizeBytes=%d scheduler=%s delayMs=%d node=%s timestamp=%s",
+            request.getId(),
+            request.getType().getDisplayName(),
+            request.getSizeBytes(),
+            scheduler.getName(),
+            latencyMs,
+            node.getAddress(),
+            Instant.now().toString()
+        );
+        postSystemLog("TASK_SCHEDULED", description);
+    }
+
+    private void postSystemLog(String eventType, String description) {
+        try {
+            String payload = "event_type=" + URLEncoder.encode(eventType, StandardCharsets.UTF_8)
+                + "&description=" + URLEncoder.encode(description, StandardCharsets.UTF_8)
+                + "&severity=INFO"
+                + "&service_name=load-balancer";
+            byte[] body = payload.getBytes(StandardCharsets.UTF_8);
+
+            URL url = new URL(String.format("http://%s:%d/api/system-logs", logHost, logPort));
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(LOG_TIMEOUT_MS);
+            connection.setReadTimeout(LOG_TIMEOUT_MS);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+            try (OutputStream out = connection.getOutputStream()) {
+                out.write(body);
+            }
+            int code = connection.getResponseCode();
+            if (code < 200 || code >= 300) {
+                System.err.printf("[LB Worker] Log ingestion failed (HTTP %d)%n", code);
+            }
+            connection.disconnect();
+        } catch (Exception e) {
+            System.err.printf("[LB Worker] Log ingestion error: %s%n", e.getMessage());
+        }
+    }
+
+    private long readLongEnv(String key, long defaultValue) {
+        String value = System.getenv(key);
+        if (value == null || value.trim().isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private int readIntEnv(String key, int defaultValue) {
+        String value = System.getenv(key);
+        if (value == null || value.trim().isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
 }

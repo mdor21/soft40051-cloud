@@ -4,20 +4,29 @@ import java.sql.Timestamp;
 
 public class FileMetadata {
 
-    private long id;
+    private String fileId;
+    private long ownerId;
     private String username;
-    private String filename;
+    private String originalFilename;
     private long fileSize;
-    private String filePath;
+    private int totalChunks;
     private Timestamp createdAt;
 
     // Getters and Setters
-    public long getId() {
-        return id;
+    public String getFileId() {
+        return fileId;
     }
 
-    public void setId(long id) {
-        this.id = id;
+    public void setFileId(String fileId) {
+        this.fileId = fileId;
+    }
+
+    public long getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(long ownerId) {
+        this.ownerId = ownerId;
     }
 
     public String getUsername() {
@@ -28,12 +37,12 @@ public class FileMetadata {
         this.username = username;
     }
 
-    public String getFilename() {
-        return filename;
+    public String getOriginalFilename() {
+        return originalFilename;
     }
 
-    public void setFilename(String filename) {
-        this.filename = filename;
+    public void setOriginalFilename(String originalFilename) {
+        this.originalFilename = originalFilename;
     }
 
     public long getFileSize() {
@@ -44,12 +53,12 @@ public class FileMetadata {
         this.fileSize = fileSize;
     }
 
-    public String getFilePath() {
-        return filePath;
+    public int getTotalChunks() {
+        return totalChunks;
     }
 
-    public void setFilePath(String filePath) {
-        this.filePath = filePath;
+    public void setTotalChunks(int totalChunks) {
+        this.totalChunks = totalChunks;
     }
 
     public Timestamp getCreatedAt() {

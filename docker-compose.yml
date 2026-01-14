@@ -100,6 +100,7 @@ services:
       - SERVER_PORT=${AGG_PORT}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - RESET_SCHEMA=false
+      - LB_LOG_PORT=${LB_LOG_PORT}
     depends_on:
       lamp-server:
         condition: service_healthy
@@ -134,10 +135,21 @@ services:
       - AGGREGATOR_PORT=${AGG_PORT}
       - MQTT_BROKER_HOST=mqtt-broker
       - MQTT_BROKER_PORT=1883
+      - STORAGE_NODES=aggregator:${AGG_PORT}
       - SERVER_PORT=${LB_PORT}
+      - SCHEDULER_TYPE=${SCHEDULER_TYPE}
+      - LB_DELAY_MS_MIN=${LB_DELAY_MS_MIN}
+      - LB_DELAY_MS_MAX=${LB_DELAY_MS_MAX}
+      - LB_LOG_PORT=${LB_LOG_PORT}
     depends_on:
       - aggregator
       - mqtt-broker
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c \"exec 3<>/dev/tcp/localhost/${LB_PORT} && echo -e 'GET /api/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200'\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     restart: unless-stopped
 
   # SFTP Storage Nodes

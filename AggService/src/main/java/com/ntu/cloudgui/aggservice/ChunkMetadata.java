@@ -5,7 +5,7 @@ import java.sql.Timestamp;
 public class ChunkMetadata {
 
     private long id;
-    private long fileId;
+    private String fileId;
     private int chunkIndex;
     private long crc32;
     private String fileServerName;
@@ -22,11 +22,11 @@ public class ChunkMetadata {
         this.id = id;
     }
 
-    public long getFileId() {
+    public String getFileId() {
         return fileId;
     }
 
-    public void setFileId(long fileId) {
+    public void setFileId(String fileId) {
         this.fileId = fileId;
     }
 

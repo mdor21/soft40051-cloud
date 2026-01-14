@@ -123,6 +123,7 @@ public class LoadBalancerAPIServer {
                 // Extract file metadata from headers
                 String fileName = exchange.getRequestHeaders().getFirst("X-File-Name");
                 String fileSizeStr = exchange.getRequestHeaders().getFirst("X-File-Size");
+                String requestedFileId = exchange.getRequestHeaders().getFirst("X-File-ID");
 
                 if (fileName == null || fileSizeStr == null) {
                     sendError(exchange, 400, "Missing file metadata headers");
@@ -130,12 +131,16 @@ public class LoadBalancerAPIServer {
                 }
 
                 long fileSize = parseFileSize(fileSizeStr);
-                String fileId = UUID.randomUUID().toString();
+                String fileId = (requestedFileId == null || requestedFileId.isBlank())
+                    ? UUID.randomUUID().toString()
+                    : requestedFileId;
 
                 // Read file content from request body
                 byte[] fileContent = exchange.getRequestBody().readAllBytes();
                 System.out.printf("[API] UPLOAD %s: %s (%.2f MB)%n",
                         fileId, fileName, fileContent.length / 1_000_000.0);
+
+                FileBufferStore.put(fileId, fileName, fileContent);
 
                 // Queue request for load balancer
                 Request request = new Request(fileId, Request.Type.UPLOAD, fileSize, 0);
@@ -267,7 +272,7 @@ public class LoadBalancerAPIServer {
 
 
     private byte[] fetchFileFromNode(StorageNode node, String fileId) throws Exception {
-        String aggUrl = "http://" + node.getAddress() + "/files/" + fileId + "/download";
+        String aggUrl = "http://" + node.getAddress() + "/api/files/" + fileId + "/download";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(new URI(aggUrl))
@@ -321,4 +326,3 @@ public class LoadBalancerAPIServer {
         }
     }
 }
-

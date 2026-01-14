@@ -16,18 +16,18 @@ public class ChunkMetadataRepository {
     }
 
     public void save(ChunkMetadata chunkMetadata) throws SQLException {
-        String sql = "INSERT INTO chunk_metadata (file_id, chunk_index, crc32, file_server_name, chunk_path, chunk_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO Chunk_Metadata (file_id, chunk_sequence, crc32_checksum, server_location, chunk_size, storage_path) " +
+            "VALUES (?, ?, ?, ?, ?, ?)";
         Connection conn = null;
         try {
             conn = databaseManager.getConnection();
             try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                pstmt.setLong(1, chunkMetadata.getFileId());
+                pstmt.setString(1, chunkMetadata.getFileId());
                 pstmt.setInt(2, chunkMetadata.getChunkIndex());
-                pstmt.setLong(3, chunkMetadata.getCrc32());
+                pstmt.setString(3, formatCrc32(chunkMetadata.getCrc32()));
                 pstmt.setString(4, chunkMetadata.getFileServerName());
-                pstmt.setString(5, chunkMetadata.getChunkPath());
-                pstmt.setLong(6, chunkMetadata.getChunkSize());
-                pstmt.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
+                pstmt.setLong(5, chunkMetadata.getChunkSize());
+                pstmt.setString(6, chunkMetadata.getChunkPath());
                 pstmt.executeUpdate();
                 logger.debug("Saved chunk metadata for fileId: {}, chunkIndex: {}", chunkMetadata.getFileId(), chunkMetadata.getChunkIndex());
             }
@@ -36,23 +36,23 @@ public class ChunkMetadataRepository {
         }
     }
 
-    public List<ChunkMetadata> findByFileIdOrderByChunkIndexAsc(long fileId) throws SQLException {
+    public List<ChunkMetadata> findByFileIdOrderByChunkIndexAsc(String fileId) throws SQLException {
         List<ChunkMetadata> chunks = new ArrayList<>();
-        String sql = "SELECT * FROM chunk_metadata WHERE file_id = ? ORDER BY chunk_index ASC";
+        String sql = "SELECT * FROM Chunk_Metadata WHERE file_id = ? ORDER BY chunk_sequence ASC";
         Connection conn = null;
         try {
             conn = databaseManager.getConnection();
             try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                pstmt.setLong(1, fileId);
+                pstmt.setString(1, fileId);
                 try (ResultSet rs = pstmt.executeQuery()) {
                     while (rs.next()) {
                         ChunkMetadata chunk = new ChunkMetadata();
-                        chunk.setId(rs.getLong("id"));
-                        chunk.setFileId(rs.getLong("file_id"));
-                        chunk.setChunkIndex(rs.getInt("chunk_index"));
-                        chunk.setCrc32(rs.getLong("crc32"));
-                        chunk.setFileServerName(rs.getString("file_server_name"));
-                        chunk.setChunkPath(rs.getString("chunk_path"));
+                        chunk.setId(rs.getLong("chunk_id"));
+                        chunk.setFileId(rs.getString("file_id"));
+                        chunk.setChunkIndex(rs.getInt("chunk_sequence"));
+                        chunk.setCrc32(parseCrc32(rs.getString("crc32_checksum")));
+                        chunk.setFileServerName(rs.getString("server_location"));
+                        chunk.setChunkPath(rs.getString("storage_path"));
                         chunk.setChunkSize(rs.getLong("chunk_size"));
                         chunks.add(chunk);
                     }
@@ -64,18 +64,33 @@ public class ChunkMetadataRepository {
         return chunks;
     }
 
-    public void deleteByFileId(long fileId) throws SQLException {
-        String sql = "DELETE FROM chunk_metadata WHERE file_id = ?";
+    public void deleteByFileId(String fileId) throws SQLException {
+        String sql = "DELETE FROM Chunk_Metadata WHERE file_id = ?";
         Connection conn = null;
         try {
             conn = databaseManager.getConnection();
             try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                pstmt.setLong(1, fileId);
+                pstmt.setString(1, fileId);
                 int affectedRows = pstmt.executeUpdate();
                 logger.info("Deleted {} chunk metadata records for fileId: {}", affectedRows, fileId);
             }
         } finally {
             databaseManager.releaseConnection(conn);
+        }
+    }
+
+    private String formatCrc32(long crc32) {
+        return String.format("%08x", crc32);
+    }
+
+    private long parseCrc32(String crc32Hex) {
+        if (crc32Hex == null || crc32Hex.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Long.parseUnsignedLong(crc32Hex.trim(), 16);
+        } catch (NumberFormatException e) {
+            return 0L;
         }
     }
 }

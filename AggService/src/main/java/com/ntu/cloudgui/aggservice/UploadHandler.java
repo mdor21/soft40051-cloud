@@ -23,6 +23,7 @@ public class UploadHandler {
         String username = headers.get("USERNAME");
         String filename = headers.get("FILENAME");
         String contentLengthStr = headers.get("CONTENT_LENGTH");
+        String fileId = headers.get("FILE_ID");
 
         if (username == null || filename == null || contentLengthStr == null) {
             sendError(out, "ERROR BAD_REQUEST Missing required headers");
@@ -55,15 +56,15 @@ public class UploadHandler {
         }
 
         try {
-            long fileId = fileProcessingService.processAndStoreFile(filename, fileData, username);
-            sendSuccess(out, fileId);
+            String storedFileId = fileProcessingService.processAndStoreFile(filename, fileData, username, fileId);
+            sendSuccess(out, storedFileId);
         } catch (ProcessingException e) {
             logger.error("Error processing file '{}'", filename, e);
             sendError(out, "ERROR INTERNAL_SERVER_ERROR " + e.getMessage());
         }
     }
 
-    private void sendSuccess(OutputStream out, long fileId) throws IOException {
+    private void sendSuccess(OutputStream out, String fileId) throws IOException {
         String response = "OK FILE_ID: " + fileId + "\n";
         out.write(response.getBytes(StandardCharsets.UTF_8));
         out.flush();

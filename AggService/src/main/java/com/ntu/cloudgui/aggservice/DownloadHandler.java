@@ -21,29 +21,22 @@ public class DownloadHandler {
     }
 
     public void handle(OutputStream out, Map<String, String> headers) throws IOException {
-        String fileIdStr = headers.get("FILE_ID");
-        if (fileIdStr == null || fileIdStr.trim().isEmpty()) {
+        String fileId = headers.get("FILE_ID");
+        if (fileId == null || fileId.trim().isEmpty()) {
             sendError(out, "ERROR BAD_REQUEST Missing FILE_ID header");
             return;
         }
 
-        long fileId;
         try {
-            fileId = Long.parseLong(fileIdStr);
-        } catch (NumberFormatException e) {
-            sendError(out, "ERROR BAD_REQUEST Invalid FILE_ID format");
-            return;
-        }
-
-        try {
-            FileMetadata fileMetadata = fileMetadataRepository.findById(fileId);
+            FileMetadata fileMetadata = fileMetadataRepository.findByFileId(fileId);
             if (fileMetadata == null) {
                 sendError(out, "ERROR FILE_NOT_FOUND");
                 return;
             }
 
-            byte[] fileData = fileProcessingService.retrieveAndReassembleFile(fileId, fileMetadata.getUsername());
-            sendSuccess(out, fileMetadata.getFilename(), fileData);
+            String username = fileMetadata.getUsername() == null ? "admin" : fileMetadata.getUsername();
+            byte[] fileData = fileProcessingService.retrieveAndReassembleFile(fileId, username);
+            sendSuccess(out, fileMetadata.getOriginalFilename(), fileData);
 
         } catch (ProcessingException e) {
             logger.error("Error processing download for file ID: {}", fileId, e);

@@ -13,15 +13,15 @@ import java.util.UUID;
  * HTTP client for communicating with Load Balancer microservice.
  *
  * Connectivity:
- * - Host: lb (Docker service name)
- * - Port: 8080
+     * - Host: load-balancer (Docker service name)
+     * - Port: 6869
  * - Base path: /api
  */
 public class LoadBalancerClient {
 
     // Base URL for Load Balancer API (override via environment if needed)
     private static final String LB_BASE_URL = System.getenv()
-            .getOrDefault("LB_BASE_URL", "http://lb:8080/api");
+            .getOrDefault("LB_BASE_URL", "http://load-balancer:6869/api");
 
     private static final int TIMEOUT_MS = 30_000;
 
@@ -37,8 +37,16 @@ public class LoadBalancerClient {
     public static String uploadFile(InputStream fileStream,
                                     String fileName,
                                     long fileSize) throws IOException {
+        return uploadFile(fileStream, fileName, fileSize, null);
+    }
 
-        String fileId = UUID.randomUUID().toString();
+    public static String uploadFile(InputStream fileStream,
+                                    String fileName,
+                                    long fileSize,
+                                    String fileId) throws IOException {
+        if (fileId == null || fileId.isBlank()) {
+            fileId = UUID.randomUUID().toString();
+        }
 
         URL url = new URL(LB_BASE_URL + "/files/upload");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();

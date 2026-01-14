@@ -11,7 +11,7 @@ import com.google.gson.JsonObject;
  * Load Balancer TCP/IP Client
  * 
  * Handles communication between JavaFX GUI and Load Balancer service.
- * - Protocol: TCP/IP over Docker network (load-balancer:8080)
+ * - Protocol: TCP/IP over Docker network (load-balancer:6869)
  * - Message Format: JSON
  * 
  * Supported Operations:
@@ -21,8 +21,8 @@ import com.google.gson.JsonObject;
  */
 public class LoadBalancerClient {
     
-    private static final String LB_HOST = System.getenv().getOrDefault("LB_HOST", "localhost");
-    private static final int LB_PORT = Integer.parseInt(System.getenv().getOrDefault("LB_PORT", "8080"));
+    private static final String LB_HOST = System.getenv().getOrDefault("LB_HOST", "load-balancer");
+    private static final int LB_PORT = Integer.parseInt(System.getenv().getOrDefault("LB_PORT", "6869"));
     private static final int CONNECTION_TIMEOUT_MS = 5000;
     private static final int SOCKET_TIMEOUT_MS = 30000;
     

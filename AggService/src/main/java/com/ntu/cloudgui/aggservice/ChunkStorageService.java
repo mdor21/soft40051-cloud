@@ -30,9 +30,9 @@ public class ChunkStorageService {
         logger.info("ChunkStorageService initialized for hosts: {}", String.join(", ", fileServerHosts));
     }
 
-    public String storeChunk(byte[] chunkData, long fileId, int chunkIndex) throws ProcessingException {
+    public String storeChunk(byte[] chunkData, String fileId, int chunkIndex) throws ProcessingException {
         String server = selectNextServer();
-        String remotePath = String.format("/data/%d/chunk_%d.enc", fileId, chunkIndex);
+        String remotePath = String.format("/data/%s/chunk_%d.enc", fileId, chunkIndex);
         Semaphore semaphore = fileServerSemaphores.get(server);
 
         if (semaphore == null) {
@@ -55,8 +55,8 @@ public class ChunkStorageService {
         }
     }
 
-    public byte[] retrieveChunk(String server, long fileId, int chunkIndex) throws ProcessingException {
-        String remotePath = String.format("/data/%d/chunk_%d.enc", fileId, chunkIndex);
+    public byte[] retrieveChunk(String server, String fileId, int chunkIndex) throws ProcessingException {
+        String remotePath = String.format("/data/%s/chunk_%d.enc", fileId, chunkIndex);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         Semaphore semaphore = fileServerSemaphores.get(server);
 
@@ -80,8 +80,8 @@ public class ChunkStorageService {
         }
     }
 
-    public void deleteChunk(String server, long fileId, int chunkIndex) throws ProcessingException {
-        String remotePath = String.format("/data/%d/chunk_%d.enc", fileId, chunkIndex);
+    public void deleteChunk(String server, String fileId, int chunkIndex) throws ProcessingException {
+        String remotePath = String.format("/data/%s/chunk_%d.enc", fileId, chunkIndex);
         Semaphore semaphore = fileServerSemaphores.get(server);
 
         if (semaphore == null) {

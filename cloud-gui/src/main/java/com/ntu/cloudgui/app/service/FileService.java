@@ -1,6 +1,6 @@
 package com.ntu.cloudgui.app.service;
 
-import com.ntu.cloudgui.app.api.LoadBalancerClient;
+import com.ntu.cloudgui.app.client.LoadBalancerClient;
 import com.ntu.cloudgui.app.db.DatabaseManager;
 import com.ntu.cloudgui.app.db.FileMetadataRepository;
 import com.ntu.cloudgui.app.db.AclRepository;
@@ -10,6 +10,9 @@ import com.ntu.cloudgui.app.model.FileMetadata;
 import com.ntu.cloudgui.app.session.SessionState;
 import com.google.gson.Gson;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +24,6 @@ public class FileService {
     private final AclRepository aclRepo = new AclRepository();
     private final SessionCacheRepository sessionCacheRepo = new SessionCacheRepository();
     private final LoggingService logger = LoggingService.getInstance();
-    private final LoadBalancerClient loadBalancerClient = new LoadBalancerClient();
     private final Gson gson = new Gson();
 
     public CompletableFuture<OperationResult> createFile(String filename) {
@@ -33,22 +35,19 @@ public class FileService {
 
             try {
                 if (online) {
-                    fileMetadataRepo.saveOrUpdate(fileId, filename, username, 0L);
-                    sessionCacheRepo.upsertLocalFileMetadata(fileId, getCurrentUserId(), filename, 0L, 1,
-                        "synced", now, now);
-                    logger.log(username, "CREATE_FILE", "Created file " + filename, true);
                     String warning = null;
                     try {
-                        LoadBalancerClient.UploadResponse response = loadBalancerClient.createFile(filename, username).join();
-                        if (response != null && response.fileId != null && !response.fileId.isBlank()) {
-                            fileId = response.fileId;
-                        }
-                        if (response == null || !"OK".equalsIgnoreCase(response.status) && !"queued".equalsIgnoreCase(response.status)) {
-                            warning = response == null ? "no response from storage" : response.message;
+                        String lbFileId = uploadViaLoadBalancer(filename, new byte[0], resolveFileId(filename));
+                        if (lbFileId != null && !lbFileId.isBlank()) {
+                            fileId = lbFileId;
                         }
                     } catch (Exception e) {
                         warning = e.getMessage();
                     }
+                    fileMetadataRepo.saveOrUpdate(fileId, filename, username, 0L);
+                    sessionCacheRepo.upsertLocalFileMetadata(fileId, getCurrentUserId(), filename, 0L, 1,
+                        "synced", now, now);
+                    logger.log(username, "CREATE_FILE", "Created file " + filename, true);
                     if (warning != null) {
                         logger.log(username, "CREATE_FILE_STORAGE_WARNING", warning, false);
                         return OperationResult.success("File metadata created; storage warning: " + warning);
@@ -82,22 +81,19 @@ public class FileService {
 
             try {
                 if (online) {
-                    fileMetadataRepo.saveOrUpdate(fileId, filename, username, data.length);
-                    sessionCacheRepo.upsertLocalFileMetadata(fileId, getCurrentUserId(), filename, data.length, 1,
-                        "synced", now, now);
-                    logger.log(username, "UPDATE_FILE", "Updated file " + filename, true);
                     String warning = null;
                     try {
-                        LoadBalancerClient.UploadResponse response = loadBalancerClient.updateFile(filename, data.length, data).join();
-                        if (response != null && response.fileId != null && !response.fileId.isBlank()) {
-                            fileId = response.fileId;
-                        }
-                        if (response == null || !"OK".equalsIgnoreCase(response.status) && !"queued".equalsIgnoreCase(response.status)) {
-                            warning = response == null ? "no response from storage" : response.message;
+                        String lbFileId = uploadViaLoadBalancer(filename, data, resolveFileId(filename));
+                        if (lbFileId != null && !lbFileId.isBlank()) {
+                            fileId = lbFileId;
                         }
                     } catch (Exception e) {
                         warning = e.getMessage();
                     }
+                    fileMetadataRepo.saveOrUpdate(fileId, filename, username, data.length);
+                    sessionCacheRepo.upsertLocalFileMetadata(fileId, getCurrentUserId(), filename, data.length, 1,
+                        "synced", now, now);
+                    logger.log(username, "UPDATE_FILE", "Updated file " + filename, true);
                     if (warning != null) {
                         logger.log(username, "UPDATE_FILE_STORAGE_WARNING", warning, false);
                         return OperationResult.success("Saved metadata; storage warning: " + warning);
@@ -131,22 +127,19 @@ public class FileService {
 
             try {
                 if (online) {
-                    fileMetadataRepo.saveOrUpdate(fileId, filename, username, data.length);
-                    sessionCacheRepo.upsertLocalFileMetadata(fileId, getCurrentUserId(), filename, data.length, 1,
-                        "synced", now, now);
-                    logger.log(username, "UPLOAD_FILE", "Uploaded file " + filename, true);
                     String warning = null;
                     try {
-                        LoadBalancerClient.UploadResponse response = loadBalancerClient.uploadFile(filename, data.length, data).join();
-                        if (response != null && response.fileId != null && !response.fileId.isBlank()) {
-                            fileId = response.fileId;
-                        }
-                        if (response == null || !"OK".equalsIgnoreCase(response.status) && !"queued".equalsIgnoreCase(response.status)) {
-                            warning = response == null ? "no response from storage" : response.message;
+                        String lbFileId = uploadViaLoadBalancer(filename, data, resolveFileId(filename));
+                        if (lbFileId != null && !lbFileId.isBlank()) {
+                            fileId = lbFileId;
                         }
                     } catch (Exception e) {
                         warning = e.getMessage();
                     }
+                    fileMetadataRepo.saveOrUpdate(fileId, filename, username, data.length);
+                    sessionCacheRepo.upsertLocalFileMetadata(fileId, getCurrentUserId(), filename, data.length, 1,
+                        "synced", now, now);
+                    logger.log(username, "UPLOAD_FILE", "Uploaded file " + filename, true);
                     if (warning != null) {
                         logger.log(username, "UPLOAD_FILE_STORAGE_WARNING", warning, false);
                         return OperationResult.success("Uploaded metadata; storage warning: " + warning);
@@ -182,15 +175,7 @@ public class FileService {
                     fileMetadataRepo.delete(fileId);
                     sessionCacheRepo.deleteLocalFile(fileId);
                     logger.log(username, "DELETE_FILE", "Deleted file " + filename, true);
-                    String warning = null;
-                    try {
-                        LoadBalancerClient.DeleteResponse response = loadBalancerClient.deleteFile(filename, username).join();
-                        if (response == null || !"OK".equalsIgnoreCase(response.status)) {
-                            warning = response == null ? "no response from storage" : response.message;
-                        }
-                    } catch (Exception e) {
-                        warning = e.getMessage();
-                    }
+                    String warning = "delete not supported by load balancer API";
                     if (warning != null) {
                         logger.log(username, "DELETE_FILE_STORAGE_WARNING", warning, false);
                         return OperationResult.success("Deleted metadata; storage warning: " + warning);
@@ -238,8 +223,16 @@ public class FileService {
         });
     }
 
-    public CompletableFuture<LoadBalancerClient.DownloadResponse> downloadFile(String filename) {
-        return CompletableFuture.supplyAsync(() -> loadBalancerClient.downloadFile(filename).join());
+    public CompletableFuture<DownloadResult> downloadFile(String filename) {
+        return CompletableFuture.supplyAsync(() -> {
+            String fileId = resolveFileId(filename);
+            try (InputStream input = LoadBalancerClient.downloadFile(fileId)) {
+                byte[] data = input.readAllBytes();
+                return DownloadResult.success(data);
+            } catch (Exception e) {
+                return DownloadResult.failure(e.getMessage());
+            }
+        });
     }
 
     public CompletableFuture<List<String>> listFilesForCurrentUser() {
@@ -325,6 +318,33 @@ public class FileService {
 
         public static OperationResult failure(String message) {
             return new OperationResult(false, message);
+        }
+    }
+
+    public static class DownloadResult {
+        public final String status;
+        public final String message;
+        public final byte[] fileData;
+
+        private DownloadResult(String status, String message, byte[] fileData) {
+            this.status = status;
+            this.message = message;
+            this.fileData = fileData;
+        }
+
+        public static DownloadResult success(byte[] fileData) {
+            return new DownloadResult("OK", "success", fileData);
+        }
+
+        public static DownloadResult failure(String message) {
+            return new DownloadResult("ERROR", message, null);
+        }
+    }
+
+    private String uploadViaLoadBalancer(String filename, byte[] data, String fileId) throws IOException {
+        byte[] payload = data == null ? new byte[0] : data;
+        try (InputStream input = new ByteArrayInputStream(payload)) {
+            return LoadBalancerClient.uploadFile(input, filename, payload.length, fileId);
         }
     }
 }

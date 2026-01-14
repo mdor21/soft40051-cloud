@@ -14,10 +14,8 @@ public class SchemaManager {
     /**
      * Ensures the database schema is correctly configured.
      * <p>
-     * This method has been made idempotent. It uses `CREATE TABLE IF NOT EXISTS`
-     * to avoid dropping tables on every application start. The responsibility for
-     * creating the schema and seeding the admin user has been moved to the
-     * `02-create-schema.sql` script executed by the MySQL container.
+     * This method is idempotent. It mirrors the MySQL init SQL so a
+     * RESET_SCHEMA=true run still produces the expected schema.
      *
      * @param connection The database connection.
      */
@@ -30,62 +28,79 @@ public class SchemaManager {
         try (Statement stmt = connection.createStatement()) {
             logger.info("Ensuring database schema exists...");
 
-            // The table creation is now handled by the Docker entrypoint script.
-            // This Java code is kept for legacy purposes or for environments
-            // where the entrypoint script might not run. It's idempotent.
-            logger.debug("Verifying core tables exist...");
-
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS `User_Profiles` (
-                  `user_id` int(11) NOT NULL AUTO_INCREMENT,
-                  `username` varchar(255) NOT NULL UNIQUE,
-                  `encrypted_password` varchar(255) NOT NULL,
-                  `role` varchar(50) NOT NULL,
-                  `last_modified` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                  PRIMARY KEY (`user_id`)
-                );
+                    `user_id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `username` VARCHAR(50) UNIQUE NOT NULL,
+                    `password_hash` VARCHAR(255) NOT NULL,
+                    `password_salt` VARCHAR(64) NOT NULL,
+                    `role` ENUM('standard', 'admin') DEFAULT 'standard',
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX `idx_username` (`username`)
+                )
             """);
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS `File_Metadata` (
-                  `file_id` int(11) NOT NULL AUTO_INCREMENT,
-                  `user_id` int(11) NOT NULL,
-                  `file_name` varchar(255) NOT NULL,
-                  `file_size_bytes` bigint NOT NULL,
-                  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  `last_modified` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                  PRIMARY KEY (`file_id`),
-                  FOREIGN KEY (`user_id`) REFERENCES `User_Profiles`(`user_id`)
-                );
+                    `metadata_id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `file_id` VARCHAR(36) NOT NULL,
+                    `owner_id` INT NOT NULL,
+                    `original_filename` VARCHAR(255) NOT NULL,
+                    `file_size` BIGINT NOT NULL,
+                    `total_chunks` INT NOT NULL,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (`owner_id`) REFERENCES `User_Profiles`(`user_id`) ON DELETE CASCADE,
+                    INDEX `idx_file_id` (`file_id`)
+                )
+            """);
+
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS `Chunk_Metadata` (
+                    `chunk_id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `file_id` VARCHAR(36) NOT NULL,
+                    `chunk_sequence` INT NOT NULL,
+                    `crc32_checksum` VARCHAR(8) NOT NULL,
+                    `server_location` VARCHAR(50) NOT NULL,
+                    `chunk_size` INT NOT NULL,
+                    `storage_path` VARCHAR(255) NOT NULL,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (`file_id`) REFERENCES `File_Metadata`(`file_id`) ON DELETE CASCADE,
+                    INDEX `idx_file_chunk` (`file_id`, `chunk_sequence`)
+                )
             """);
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS `ACL` (
-                  `acl_id` int(11) NOT NULL AUTO_INCREMENT,
-                  `file_id` int(11) NOT NULL,
-                  `user_id` int(11) NOT NULL,
-                  `permission` varchar(50) NOT NULL,
-                  PRIMARY KEY (`acl_id`),
-                  FOREIGN KEY (`file_id`) REFERENCES `File_Metadata`(`file_id`),
-                  FOREIGN KEY (`user_id`) REFERENCES `User_Profiles`(`user_id`)
-                );
+                    `acl_id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `file_id` VARCHAR(36) NOT NULL,
+                    `user_id` INT NOT NULL,
+                    `permission_level` ENUM('read', 'write') NOT NULL,
+                    `granted_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    `granted_by` INT NOT NULL,
+                    FOREIGN KEY (`file_id`) REFERENCES `File_Metadata`(`file_id`) ON DELETE CASCADE,
+                    FOREIGN KEY (`user_id`) REFERENCES `User_Profiles`(`user_id`) ON DELETE CASCADE,
+                    UNIQUE KEY `unique_file_user` (`file_id`, `user_id`)
+                )
             """);
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS `System_Logs` (
-                  `log_id` int(11) NOT NULL AUTO_INCREMENT,
-                  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  `event_type` varchar(255) NOT NULL,
-                  `user_id` int(11) NULL,
-                  `description` text NOT NULL,
-                  PRIMARY KEY (`log_id`)
-                );
+                    `log_id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    `event_type` VARCHAR(50) NOT NULL,
+                    `user_id` INT,
+                    `description` TEXT NOT NULL,
+                    `severity` ENUM('INFO', 'WARNING', 'ERROR', 'CRITICAL') DEFAULT 'INFO',
+                    `service_name` VARCHAR(50),
+                    FOREIGN KEY (`user_id`) REFERENCES `User_Profiles`(`user_id`) ON DELETE SET NULL,
+                    INDEX `idx_timestamp` (`timestamp`),
+                    INDEX `idx_event_type` (`event_type`)
+                )
             """);
 
             logger.info("Schema verification complete. All required tables exist.");
 
-            // Seeding the admin user is now handled by the `02-create-schema.sql` script.
-            // This section is removed to centralize database setup.
+            // Seeding the admin user is handled by the Docker init SQL.
 
         } catch (SQLException e) {
             logger.error("Failed to ensure database schema.", e);

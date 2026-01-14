@@ -142,7 +142,7 @@ public class MainLb {
      */
     private static String getSchedulerType() {
         String envValue = System.getenv("SCHEDULER_TYPE");
-        if (envValue != null) {
+        if (envValue != null && !envValue.trim().isEmpty()) {
             String upper = envValue.toUpperCase();
             if (upper.equals("FCFS") || upper.equals("SJN") || upper.equals("ROUNDROBIN")) {
                 return upper;

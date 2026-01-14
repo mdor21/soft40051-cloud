@@ -4,11 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.CountDownLatch;
 
 public class AggServiceServer {
 
@@ -18,6 +16,9 @@ public class AggServiceServer {
     private final DatabaseManager databaseManager;
     private final FileProcessingService fileProcessingService;
     private final FileMetadataRepository fileMetadataRepository;
+    private LbLogServer lbLogServer;
+    private AggApiServer apiServer;
+    private final CountDownLatch shutdownLatch = new CountDownLatch(1);
 
     public AggServiceServer(Configuration config) {
         this.port = config.getAggServicePort();
@@ -42,6 +43,14 @@ public class AggServiceServer {
         // Now that the schema is ready, initialize the connection pool
         initializePoolWithRetry(config);
 
+        try {
+            lbLogServer = new LbLogServer(databaseManager, config.getLbLogPort());
+            lbLogServer.start();
+            logger.info("LB log ingestion server started on port {}", config.getLbLogPort());
+        } catch (Exception e) {
+            logger.warn("Failed to start LB log ingestion server: {}", e.getMessage());
+        }
+
         this.fileMetadataRepository = new FileMetadataRepository(databaseManager);
         ChunkMetadataRepository chunkMetadataRepository = new ChunkMetadataRepository(databaseManager);
         LogEntryRepository logEntryRepository = new LogEntryRepository(databaseManager);
@@ -64,26 +73,16 @@ public class AggServiceServer {
     }
 
     public void start() {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
-            logger.info("AggServiceServer started on port {}", port);
-            while (!Thread.currentThread().isInterrupted()) {
-                try {
-                    Socket clientSocket = serverSocket.accept();
-                    logger.info("Accepted connection from {}", clientSocket.getRemoteSocketAddress());
-                    // Pass the services to the handler
-                    ClientHandler handler = new ClientHandler(clientSocket, fileProcessingService, fileMetadataRepository);
-                    executorService.submit(handler);
-                } catch (IOException e) {
-                    if (Thread.currentThread().isInterrupted()) {
-                        logger.info("Server socket interrupted, shutting down.");
-                        break;
-                    }
-                    logger.error("Error accepting client connection", e);
-                }
-            }
+        try {
+            apiServer = new AggApiServer(port, executorService, fileProcessingService, fileMetadataRepository);
+            apiServer.start();
+            logger.info("AggService HTTP API started on port {}", port);
+            shutdownLatch.await();
         } catch (IOException e) {
-            logger.error("Could not start server on port {}", port, e);
-        } finally {
+            logger.error("Could not start HTTP server on port {}", port, e);
+            shutdown();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             shutdown();
         }
     }
@@ -125,6 +124,13 @@ public class AggServiceServer {
             Thread.currentThread().interrupt();
         }
         databaseManager.closePool();
+        if (lbLogServer != null) {
+            lbLogServer.stop();
+        }
+        if (apiServer != null) {
+            apiServer.stop();
+        }
+        shutdownLatch.countDown();
         logger.info("AggServiceServer shut down complete.");
     }
 
