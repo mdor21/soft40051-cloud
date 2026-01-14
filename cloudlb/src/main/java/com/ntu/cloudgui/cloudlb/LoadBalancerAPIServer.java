@@ -173,60 +173,104 @@ public class LoadBalancerAPIServer {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
-                sendError(exchange, 405, "Method Not Allowed");
-                return;
-            }
-
             try {
                 // Extract fileId from path: /api/files/{fileId}/download
                 String path = exchange.getRequestURI().getPath();
                 String[] parts = path.split("/");
 
-                if (parts.length < 4 || !parts[3].equals("download")) {
+                String method = exchange.getRequestMethod();
+                String fileId = null;
+                String action = null;
+
+                if (parts.length >= 5) {
+                    fileId = parts[3];
+                    action = parts[4];
+                } else if (parts.length >= 4) {
+                    fileId = parts[3];
+                }
+
+                if (fileId == null || fileId.isBlank()) {
                     sendError(exchange, 400, "Invalid request format");
                     return;
                 }
 
-                String fileId = parts[2];
-                System.out.println("[API] DOWNLOAD: " + fileId);
+                if ("GET".equalsIgnoreCase(method)) {
+                    if (!"download".equalsIgnoreCase(action)) {
+                        sendError(exchange, 400, "Invalid request format");
+                        return;
+                    }
+                    System.out.println("[API] DOWNLOAD: " + fileId);
 
-                // Queue download request
-                Request request = new Request(fileId, Request.Type.DOWNLOAD, 0, 0);
-                requestQueue.add(request);
-                requestQueue.notifyNewRequest();
+                    // Queue download request
+                    Request request = new Request(fileId, Request.Type.DOWNLOAD, 0, 0);
+                    requestQueue.add(request);
+                    requestQueue.notifyNewRequest();
 
-                // Synchronous load balancing for download
-                List<StorageNode> healthyNodes = nodeRegistry.getHealthyNodes();
-                if (healthyNodes.isEmpty()) {
-                    sendError(exchange, 503, "No healthy nodes available");
+                    // Synchronous load balancing for download
+                    List<StorageNode> healthyNodes = nodeRegistry.getHealthyNodes();
+                    if (healthyNodes.isEmpty()) {
+                        sendError(exchange, 503, "No healthy nodes available");
+                        return;
+                    }
+
+                    Request downloadRequest = new Request(fileId, Request.Type.DOWNLOAD, 0, 0);
+                    StorageNode selectedNode = scheduler.selectNode(healthyNodes, downloadRequest);
+                    if (selectedNode == null) {
+                        sendError(exchange, 500, "Scheduler failed to select a node");
+                        return;
+                    }
+
+                    // Fetch file from the selected node
+                    byte[] fileContent = fetchFileFromNode(selectedNode, fileId);
+
+                    if (fileContent == null || fileContent.length == 0) {
+                        sendError(exchange, 404, "File not found");
+                        return;
+                    }
+
+                    // Send file content to client
+                    exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
+                    exchange.getResponseHeaders().set("Content-Length", String.valueOf(fileContent.length));
+                    exchange.sendResponseHeaders(200, fileContent.length);
+                    exchange.getResponseBody().write(fileContent);
+                    exchange.close();
+
+                    System.out.printf("[API] DOWNLOAD %s: Sent %.2f MB%n",
+                            fileId, fileContent.length / 1_000_000.0);
                     return;
                 }
 
-                Request downloadRequest = new Request(fileId, Request.Type.DOWNLOAD, 0, 0);
-                StorageNode selectedNode = scheduler.selectNode(healthyNodes, downloadRequest);
-                if (selectedNode == null) {
-                    sendError(exchange, 500, "Scheduler failed to select a node");
+                if ("DELETE".equalsIgnoreCase(method)) {
+                    System.out.println("[API] DELETE: " + fileId);
+
+                    List<StorageNode> healthyNodes = nodeRegistry.getHealthyNodes();
+                    if (healthyNodes.isEmpty()) {
+                        sendError(exchange, 503, "No healthy nodes available");
+                        return;
+                    }
+
+                    Request deleteRequest = new Request(fileId, Request.Type.DOWNLOAD, 0, 0);
+                    StorageNode selectedNode = scheduler.selectNode(healthyNodes, deleteRequest);
+                    if (selectedNode == null) {
+                        sendError(exchange, 500, "Scheduler failed to select a node");
+                        return;
+                    }
+
+                    boolean deleted = forwardDeleteToNode(selectedNode, fileId);
+                    if (!deleted) {
+                        sendError(exchange, 500, "Delete failed");
+                        return;
+                    }
+
+                    exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+                    String response = "{\"status\":\"deleted\",\"fileId\":\"" + escapeJson(fileId) + "\"}";
+                    exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
+                    exchange.getResponseBody().write(response.getBytes(StandardCharsets.UTF_8));
+                    exchange.close();
                     return;
                 }
 
-                // Fetch file from the selected node
-                byte[] fileContent = fetchFileFromNode(selectedNode, fileId);
-
-                if (fileContent == null || fileContent.length == 0) {
-                    sendError(exchange, 404, "File not found");
-                    return;
-                }
-
-                // Send file content to client
-                exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
-                exchange.getResponseHeaders().set("Content-Length", String.valueOf(fileContent.length));
-                exchange.sendResponseHeaders(200, fileContent.length);
-                exchange.getResponseBody().write(fileContent);
-                exchange.close();
-
-                System.out.printf("[API] DOWNLOAD %s: Sent %.2f MB%n",
-                        fileId, fileContent.length / 1_000_000.0);
+                sendError(exchange, 405, "Method Not Allowed");
 
             } catch (Exception e) {
                 System.err.println("[API] Download error: " + e.getMessage());
@@ -288,6 +332,20 @@ public class LoadBalancerAPIServer {
         }
 
         return response.body();
+    }
+
+    private boolean forwardDeleteToNode(StorageNode node, String fileId) throws Exception {
+        String aggUrl = "http://" + node.getAddress() + "/api/files/" + fileId + "/delete";
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(new URI(aggUrl))
+                .method("DELETE", HttpRequest.BodyPublishers.noBody())
+                .timeout(java.time.Duration.ofSeconds(30))
+                .build();
+
+        HttpResponse<byte[]> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofByteArray());
+
+        return response.statusCode() >= 200 && response.statusCode() < 300;
     }
 
     /**

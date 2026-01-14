@@ -168,6 +168,71 @@ public class AuthService {
         }
     }
 
+    public boolean changePassword(long currentUserId, String oldPassword, String newPassword) {
+        if (!DatabaseManager.isMysqlConnected()) {
+            logger.log(getCurrentUsername(), "CHANGE_PASSWORD_OFFLINE",
+                "Password change requires MySQL connection", false);
+            return false;
+        }
+
+        String username = getCurrentUsername();
+        try {
+            User user = userRepo.findByUsername(username);
+            if (user == null || user.getId() == null || user.getId() != currentUserId) {
+                logger.log(username, "CHANGE_PASSWORD_ERROR", "User not found", false);
+                return false;
+            }
+
+            if (!BCrypt.checkpw(oldPassword, user.getPasswordHash())) {
+                logger.log(username, "CHANGE_PASSWORD_INVALID", "Old password mismatch", false);
+                return false;
+            }
+
+            String hash = BCrypt.hashpw(newPassword, BCrypt.gensalt());
+            userRepo.updatePasswordHash(user.getId(), hash);
+            user.setPasswordHash(hash);
+            sessionCacheRepo.cacheUser(user);
+            SessionState.getInstance().setCurrentUser(user);
+            logger.log(username, "CHANGE_PASSWORD", "Password updated", true);
+            return true;
+        } catch (Exception e) {
+            logger.log(username, "CHANGE_PASSWORD_ERROR", e.getMessage(), false);
+            return false;
+        }
+    }
+
+    public boolean resetPassword(String targetUsername, String newPassword) {
+        if (!SessionState.getInstance().isAdmin()) {
+            logger.log(getCurrentUsername(), "UNAUTHORISED", "Attempt to RESET_PASSWORD", false);
+            return false;
+        }
+        if (!DatabaseManager.isMysqlConnected()) {
+            logger.log(getCurrentUsername(), "RESET_PASSWORD_OFFLINE",
+                "Password reset requires MySQL connection", false);
+            return false;
+        }
+
+        try {
+            User target = userRepo.findByUsername(targetUsername);
+            if (target == null || target.getId() == null) {
+                logger.log(getCurrentUsername(), "RESET_PASSWORD_ERROR",
+                    "User not found: " + targetUsername, false);
+                return false;
+            }
+
+            String hash = BCrypt.hashpw(newPassword, BCrypt.gensalt());
+            userRepo.updatePasswordHash(target.getId(), hash);
+            target.setPasswordHash(hash);
+            sessionCacheRepo.cacheUser(target);
+            logger.log(getCurrentUsername(), "RESET_PASSWORD",
+                "Reset password for " + targetUsername, true);
+            return true;
+        } catch (Exception e) {
+            logger.log(getCurrentUsername(), "RESET_PASSWORD_ERROR", e.getMessage(), false);
+            return false;
+        }
+    }
+
     private String getCurrentUsername() {
         User u = SessionState.getInstance().getCurrentUser();
         return u == null ? "SYSTEM" : u.getUsername();

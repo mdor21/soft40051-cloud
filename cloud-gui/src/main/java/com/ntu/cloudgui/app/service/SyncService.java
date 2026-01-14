@@ -10,6 +10,7 @@ import com.ntu.cloudgui.app.model.User;
 import com.ntu.cloudgui.app.model.FileMetadata;
 import com.ntu.cloudgui.app.model.Acl;
 import com.ntu.cloudgui.app.session.SessionState;
+import com.ntu.cloudgui.app.client.LoadBalancerClient;
 import com.google.gson.Gson;
 
 import java.util.List;
@@ -175,7 +176,7 @@ public class SyncService implements Runnable {
             sessionCacheRepository.deletePendingOperationsForFile(op.fileId);
             return true;
         }
-        fileMetadataRepository.delete(op.fileId);
+        LoadBalancerClient.deleteFile(op.fileId);
         sessionCacheRepository.deleteLocalFile(op.fileId);
         return true;
     }

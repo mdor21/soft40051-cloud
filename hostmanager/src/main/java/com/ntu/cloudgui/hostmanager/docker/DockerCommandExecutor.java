@@ -6,7 +6,9 @@ import org.apache.logging.log4j.Logger;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -22,17 +24,41 @@ public class DockerCommandExecutor {
      * Run a new Docker container
      */
     public ProcessResult runContainer(String containerName, int port, String image) {
+        return runContainer(containerName, port, image, "soft40051_network", Collections.emptyMap(), Collections.emptyMap());
+    }
+
+    /**
+     * Run a new Docker container with env and volume mappings
+     */
+    public ProcessResult runContainer(String containerName,
+                                      int port,
+                                      String image,
+                                      String network,
+                                      Map<String, String> envVars,
+                                      Map<String, String> volumeMappings) {
         try {
             logger.info("Starting container: {} on port {}", containerName, port);
 
-            List<String> command = new DockerCommandBuilder()
+            DockerCommandBuilder builder = new DockerCommandBuilder()
                 .withCommand("run")
                 .withDetachedMode()
-                .withName(containerName)
-                .withNetwork("soft40051_network")
-                .withPortMapping(port, 22)
-                .withImage(image)
-                .build();
+                .withName(containerName);
+
+            if (network != null && !network.isBlank()) {
+                builder.withNetwork(network);
+            }
+
+            builder.withPortMapping(port, 22);
+
+            for (Map.Entry<String, String> entry : envVars.entrySet()) {
+                builder.withEnv(entry.getKey(), entry.getValue());
+            }
+
+            for (Map.Entry<String, String> entry : volumeMappings.entrySet()) {
+                builder.withVolume(entry.getKey(), entry.getValue());
+            }
+
+            List<String> command = builder.withImage(image).build();
             
             ProcessResult result = executeWithTimeout(command, COMMAND_TIMEOUT);
             
@@ -55,7 +81,7 @@ public class DockerCommandExecutor {
      */
     public ProcessResult listContainersByName(String baseName) {
         try {
-            List<String> command = Arrays.asList("docker", "ps", "-a", "--filter", "name=" + baseName, "--format", "{{.Names}}");
+            List<String> command = Arrays.asList("docker", "ps", "--filter", "name=" + baseName, "--format", "{{.Names}}");
             return executeWithTimeout(command, 10);
         } catch (Exception e) {
             logger.error("Error listing containers by name", e);
@@ -142,6 +168,34 @@ public class DockerCommandExecutor {
             return new ProcessResult(1, "", e.getMessage());
         }
     }
+
+    /**
+     * Start a stopped container
+     */
+    public ProcessResult startContainer(String containerName) {
+        try {
+            logger.info("Starting existing container: {}", containerName);
+
+            List<String> command = new DockerCommandBuilder()
+                .withCommand("start")
+                .withContainerName(containerName)
+                .build();
+
+            ProcessResult result = executeWithTimeout(command, COMMAND_TIMEOUT);
+
+            if (result.getExitCode() == 0) {
+                logger.info("Container started: {}", containerName);
+            } else {
+                logger.error("Failed to start container: {}", result.getError());
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            logger.error("Error starting container", e);
+            return new ProcessResult(1, "", e.getMessage());
+        }
+    }
     
     /**
      * Inspect container details
@@ -192,6 +246,11 @@ public class DockerCommandExecutor {
             logger.error("Error checking container existence", e);
             return false;
         }
+    }
+
+    public boolean isContainerRunning(String containerName) {
+        ProcessResult result = inspectContainer(containerName);
+        return result.getExitCode() == 0 && result.getOutput().contains("\"Running\": true");
     }
     
     /**

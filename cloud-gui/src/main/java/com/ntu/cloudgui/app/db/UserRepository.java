@@ -91,4 +91,26 @@ public class UserRepository {
             stmt.executeUpdate();
         }
     }
+
+    public void updatePasswordHash(long userId, String passwordHash) throws Exception {
+        try (Connection conn = MySqlConnectionManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "UPDATE User_Profiles SET password_hash = ?, password_salt = ? WHERE user_id = ?")) {
+            stmt.setString(1, passwordHash);
+            stmt.setString(2, "");
+            stmt.setLong(3, userId);
+            stmt.executeUpdate();
+        }
+    }
+
+    public void updatePasswordHashByUsername(String username, String passwordHash) throws Exception {
+        try (Connection conn = MySqlConnectionManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                 "UPDATE User_Profiles SET password_hash = ?, password_salt = ? WHERE username = ?")) {
+            stmt.setString(1, passwordHash);
+            stmt.setString(2, "");
+            stmt.setString(3, username);
+            stmt.executeUpdate();
+        }
+    }
 }

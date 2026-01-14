@@ -21,6 +21,6 @@ public class ShareDialogController {
         if (selected == null) {
             return "READ"; // Default to read-only
         }
-        return "READ_WRITE".equals(selected.getText()) ? "WRITE" : "READ";
+        return "READ/WRITE".equalsIgnoreCase(selected.getText()) ? "WRITE" : "READ";
     }
 }

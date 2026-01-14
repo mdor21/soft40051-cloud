@@ -85,8 +85,8 @@ public class HostManager {
             // 3. MQTT Communication Manager
             logger.info("Initializing MQTT Connection Manager...");
             this.mqttConnectionManager = new MqttConnectionManager(
-                MqttConstants.MQTT_BROKER_HOST,
-                MqttConstants.MQTT_BROKER_PORT,
+                MqttConstants.getBrokerHost(),
+                MqttConstants.getBrokerPort(),
                 "hostmanager-" + UUID.randomUUID().toString().substring(0, 8)
             );
             this.mqttConnectionManager.connect();
@@ -198,11 +198,11 @@ public class HostManager {
         try {
             // Topic: loadbalancer/scaling/requests
             // Message format: {"action": "SCALE_UP|SCALE_DOWN", "quantity": N}
-            mqttConnectionManager.subscribe(MqttConstants.TOPIC_SCALING_REQUESTS, (topic, message) -> {
+            mqttConnectionManager.subscribe(MqttConstants.getScalingRequestsTopic(), (topic, message) -> {
                 taskExecutor.submit(() -> handleScalingRequest(new String(message.getPayload())));
             });
             
-            logger.info("Subscribed to MQTT topic: {}", MqttConstants.TOPIC_SCALING_REQUESTS);
+            logger.info("Subscribed to MQTT topic: {}", MqttConstants.getScalingRequestsTopic());
             
         } catch (Exception e) {
             logger.error("Failed to subscribe to scaling requests", e);
@@ -220,7 +220,9 @@ public class HostManager {
             
             ScalingRequest request = mqttMessageParser.parse(message);
             
-            if ("up".equalsIgnoreCase(request.getAction())) {
+            if (request.getNodeIndex() != null) {
+                scalingLogic.handleScaleForNode(request.getAction(), request.getNodeIndex());
+            } else if ("up".equalsIgnoreCase(request.getAction())) {
                 scalingLogic.handleScaleUp(request.getCount());
             } else if ("down".equalsIgnoreCase(request.getAction())) {
                 scalingLogic.handleScaleDown(request.getCount());

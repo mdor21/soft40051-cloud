@@ -1,6 +1,7 @@
 package com.ntu.cloudgui.app.controller;
 
 import com.ntu.cloudgui.app.service.SyncService;
+import com.ntu.cloudgui.app.service.AuthService;
 import com.ntu.cloudgui.app.session.SessionState;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -10,6 +11,11 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.PasswordField;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -100,6 +106,49 @@ public class DashboardController {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    @FXML
+    private void handleChangePassword() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Change Password");
+        ButtonType updateButton = new ButtonType("Update", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(updateButton, ButtonType.CANCEL);
+
+        PasswordField oldField = new PasswordField();
+        oldField.setPromptText("Current password");
+        PasswordField newField = new PasswordField();
+        newField.setPromptText("New password");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.add(new javafx.scene.control.Label("Current password:"), 0, 0);
+        grid.add(oldField, 1, 0);
+        grid.add(new javafx.scene.control.Label("New password:"), 0, 1);
+        grid.add(newField, 1, 1);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.showAndWait().ifPresent(result -> {
+            if (result == updateButton) {
+                String oldPassword = oldField.getText();
+                String newPassword = newField.getText();
+                if (oldPassword.isBlank() || newPassword.isBlank()) {
+                    showAlert("Both fields are required.");
+                    return;
+                }
+                boolean success = new AuthService().changePassword(
+                    SessionState.getInstance().getCurrentUser().getId(),
+                    oldPassword,
+                    newPassword
+                );
+                if (success) {
+                    showInfo("Password updated.");
+                } else {
+                    showAlert("Password update failed.");
+                }
+            }
+        });
     }
 
     private void startStatusTimer() {

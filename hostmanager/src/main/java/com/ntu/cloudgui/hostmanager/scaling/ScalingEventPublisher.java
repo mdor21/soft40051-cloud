@@ -33,7 +33,7 @@ public class ScalingEventPublisher {
             String jsonPayload = gson.toJson(payload);
             MqttMessage message = new MqttMessage(jsonPayload.getBytes());
             message.setQos(1);
-            mqttConnectionManager.publish(MqttConstants.TOPIC_SCALING_EVENTS, message);
+            mqttConnectionManager.publish(MqttConstants.getScalingEventsTopic(), message);
         } catch (Exception e) {
             logger.error("Failed to publish scaling event", e);
         }

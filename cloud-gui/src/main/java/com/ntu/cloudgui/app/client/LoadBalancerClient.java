@@ -20,8 +20,7 @@ import java.util.UUID;
 public class LoadBalancerClient {
 
     // Base URL for Load Balancer API (override via environment if needed)
-    private static final String LB_BASE_URL = System.getenv()
-            .getOrDefault("LB_BASE_URL", "http://load-balancer:6869/api");
+    private static final String LB_BASE_URL = resolveBaseUrl();
 
     private static final int TIMEOUT_MS = 30_000;
 
@@ -118,6 +117,27 @@ public class LoadBalancerClient {
     }
 
     /**
+     * Delete a file via the Load Balancer.
+     *
+     * @param fileId file identifier to delete
+     * @throws IOException on network or protocol error
+     */
+    public static void deleteFile(String fileId) throws IOException {
+        URL url = new URL(LB_BASE_URL + "/files/" + fileId);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("DELETE");
+        conn.setConnectTimeout(TIMEOUT_MS);
+        conn.setReadTimeout(TIMEOUT_MS);
+
+        int code = conn.getResponseCode();
+        if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_NO_CONTENT) {
+            conn.disconnect();
+            throw new IOException("Delete failed, HTTP " + code);
+        }
+        conn.disconnect();
+    }
+
+    /**
      * Simple health check against the Load Balancer.
      *
      * @return true if HTTP 200 is returned, false otherwise
@@ -145,5 +165,16 @@ public class LoadBalancerClient {
 
     private LoadBalancerClient() {
         // utility class; prevent instantiation
+    }
+
+    private static String resolveBaseUrl() {
+        String baseUrl = System.getenv("LB_BASE_URL");
+        if (baseUrl != null && !baseUrl.isBlank()) {
+            return baseUrl.endsWith("/api") ? baseUrl : baseUrl + "/api";
+        }
+
+        String host = System.getenv().getOrDefault("LB_HOST", "load-balancer");
+        String port = System.getenv().getOrDefault("LB_PORT", "6869");
+        return "http://" + host + ":" + port + "/api";
     }
 }

@@ -172,14 +172,9 @@ public class FileService {
 
             try {
                 if (online) {
-                    fileMetadataRepo.delete(fileId);
+                    LoadBalancerClient.deleteFile(fileId);
                     sessionCacheRepo.deleteLocalFile(fileId);
                     logger.log(username, "DELETE_FILE", "Deleted file " + filename, true);
-                    String warning = "delete not supported by load balancer API";
-                    if (warning != null) {
-                        logger.log(username, "DELETE_FILE_STORAGE_WARNING", warning, false);
-                        return OperationResult.success("Deleted metadata; storage warning: " + warning);
-                    }
                     return OperationResult.success("File deleted: " + filename);
                 }
 

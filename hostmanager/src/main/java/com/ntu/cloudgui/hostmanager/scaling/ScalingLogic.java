@@ -7,8 +7,13 @@ import com.ntu.cloudgui.hostmanager.docker.ProcessResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -20,9 +25,11 @@ public class ScalingLogic {
 
     private static final Logger logger = LogManager.getLogger(ScalingLogic.class);
     private static final String CONTAINER_BASE_NAME = "soft40051-files-container";
-    private static final String IMAGE_NAME = "pedrombmachado/simple-ssh-container:base";
+    private static final String IMAGE_NAME = "lscr.io/linuxserver/openssh-server:latest";
+    private static final String NETWORK_NAME = "soft40051_network";
     private static final int MIN_PORT = 4848;
     private static final int MAX_CONTAINERS = 4;
+    private static final String STORAGE_BASE_DIR_ENV = "STORAGE_BASE_DIR";
 
     private final ContainerManager containerManager;
     private final DockerCommandExecutor dockerExecutor;
@@ -90,11 +97,44 @@ public class ScalingLogic {
         containersToStop.forEach(this::stopContainer);
     }
 
+    public void handleScaleForNode(String action, int nodeIndex) {
+        if (nodeIndex < 1 || nodeIndex > MAX_CONTAINERS) {
+            logger.warn("Invalid node index {} (valid range: 1-{})", nodeIndex, MAX_CONTAINERS);
+            return;
+        }
+
+        String containerName = CONTAINER_BASE_NAME + nodeIndex;
+        if ("up".equalsIgnoreCase(action)) {
+            startContainer(containerName);
+        } else if ("down".equalsIgnoreCase(action)) {
+            stopContainer(containerName);
+        } else {
+            logger.warn("Unknown scaling action for node: {}", action);
+        }
+    }
+
     private void startContainer(String containerName) {
         try {
+            if (dockerExecutor.containerExists(containerName)) {
+                if (dockerExecutor.isContainerRunning(containerName)) {
+                    logger.info("Container already running, skipping start: {}", containerName);
+                    return;
+                }
+                ProcessResult startResult = dockerExecutor.startContainer(containerName);
+                if (startResult.getExitCode() == 0) {
+                    containerManager.addContainer(containerName);
+                    if (eventPublisher != null) {
+                        eventPublisher.publishScalingEvent("up", containerName);
+                    }
+                }
+                return;
+            }
+
             int containerNumber = getContainerNumber(containerName);
             int port = MIN_PORT + containerNumber - 1;
-            ProcessResult result = dockerExecutor.runContainer(containerName, port, IMAGE_NAME);
+            Map<String, String> envVars = buildStorageEnvVars();
+            Map<String, String> volumes = buildStorageVolumes(containerNumber);
+            ProcessResult result = dockerExecutor.runContainer(containerName, port, IMAGE_NAME, NETWORK_NAME, envVars, volumes);
             if (result.getExitCode() == 0) {
                 containerManager.addContainer(containerName);
                 if (eventPublisher != null) {
@@ -118,5 +158,51 @@ public class ScalingLogic {
 
     private int getContainerNumber(String containerName) {
         return Integer.parseInt(containerName.substring(CONTAINER_BASE_NAME.length()));
+    }
+
+    private Map<String, String> buildStorageEnvVars() {
+        Map<String, String> envVars = new HashMap<>();
+        envVars.put("PUID", getEnvOrDefault("PUID", "1000"));
+        envVars.put("PGID", getEnvOrDefault("PGID", "1000"));
+        envVars.put("TZ", getEnvOrDefault("TZ", "Etc/UTC"));
+        envVars.put("USER_NAME", getEnvOrDefault("SFTP_USER", "ntu-user"));
+
+        String sftpPass = System.getenv("SFTP_PASS");
+        if (sftpPass == null || sftpPass.isBlank()) {
+            logger.warn("SFTP_PASS is not set; storage container will start with an empty password");
+            sftpPass = "";
+        }
+        envVars.put("USER_PASSWORD", sftpPass);
+        envVars.put("SUDO_ACCESS", "true");
+
+        return envVars;
+    }
+
+    private Map<String, String> buildStorageVolumes(int containerNumber) {
+        String baseDir = resolveStorageBaseDir();
+        Path storagePath = Paths.get(baseDir, "node" + containerNumber).toAbsolutePath().normalize();
+        Map<String, String> volumes = new HashMap<>();
+        volumes.put(storagePath.toString(), "/data");
+        return volumes;
+    }
+
+    private String resolveStorageBaseDir() {
+        String envDir = System.getenv(STORAGE_BASE_DIR_ENV);
+        if (envDir != null && !envDir.isBlank()) {
+            return envDir;
+        }
+
+        if (Files.isDirectory(Paths.get("storage"))) {
+            return "storage";
+        }
+        if (Files.isDirectory(Paths.get("..", "storage"))) {
+            return Paths.get("..", "storage").toString();
+        }
+        return "storage";
+    }
+
+    private String getEnvOrDefault(String key, String defaultValue) {
+        String value = System.getenv(key);
+        return value == null || value.isBlank() ? defaultValue : value;
     }
 }

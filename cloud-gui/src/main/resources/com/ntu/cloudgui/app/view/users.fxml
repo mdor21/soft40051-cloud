@@ -42,6 +42,7 @@
             <Button text="Promote to Admin" onAction="#handlePromote"/>
             <Button text="Demote to Standard" onAction="#handleDemote"/>
             <Button text="Delete" onAction="#handleDelete"/>
+            <Button text="Reset Password" onAction="#handleResetPassword"/>
         </HBox>
     </bottom>
 

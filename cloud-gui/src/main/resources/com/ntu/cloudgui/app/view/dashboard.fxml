@@ -19,6 +19,7 @@
             <Button text="Sync Now" onAction="#handleSyncNow" styleClass="secondary"/>
             <Pane HBox.hgrow="ALWAYS"/>
             <Label fx:id="userLabel" text="User: "/>
+            <Button text="Change Password" onAction="#handleChangePassword" styleClass="secondary"/>
             <Button text="Logout" onAction="#handleLogout"/>
         </HBox>
     </top>

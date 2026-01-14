@@ -43,6 +43,21 @@ public class DockerCommandBuilder {
         return this;
     }
 
+    public DockerCommandBuilder withEnv(String key, String value) {
+        if (value == null) {
+            return this;
+        }
+        this.command.add("-e");
+        this.command.add(key + "=" + value);
+        return this;
+    }
+
+    public DockerCommandBuilder withVolume(String hostPath, String containerPath) {
+        this.command.add("-v");
+        this.command.add(hostPath + ":" + containerPath);
+        return this;
+    }
+
     public DockerCommandBuilder withImage(String image) {
         this.command.add(image);
         return this;

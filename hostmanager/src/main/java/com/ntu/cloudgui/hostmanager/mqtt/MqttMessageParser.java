@@ -20,9 +20,19 @@ public class MqttMessageParser {
     public ScalingRequest parse(String json) {
         try (JsonReader reader = Json.createReader(new StringReader(json))) {
             JsonObject jsonObject = reader.readObject();
-            String action = jsonObject.getString("action");
-            int count = jsonObject.getInt("count");
-            return new ScalingRequest(action, count);
+            String action = jsonObject.getString("action", "");
+            int count = jsonObject.containsKey("count") ? jsonObject.getInt("count") : 1;
+            Integer nodeIndex = null;
+
+            if (jsonObject.containsKey("node")) {
+                nodeIndex = jsonObject.getInt("node");
+            } else if (jsonObject.containsKey("nodeIndex")) {
+                nodeIndex = jsonObject.getInt("nodeIndex");
+            } else if (jsonObject.containsKey("containerIndex")) {
+                nodeIndex = jsonObject.getInt("containerIndex");
+            }
+
+            return new ScalingRequest(action, count, nodeIndex);
         }
     }
 }

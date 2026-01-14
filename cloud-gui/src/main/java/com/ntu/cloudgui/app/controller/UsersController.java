@@ -8,6 +8,7 @@ import com.ntu.cloudgui.app.db.UserRepository;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.scene.layout.GridPane;
 
 public class UsersController {
 
@@ -80,5 +81,38 @@ public class UsersController {
             authService.deleteUser(u.getUsername());
             refresh();
         }
+    }
+
+    @FXML
+    private void handleResetPassword() {
+        User u = usersTable.getSelectionModel().getSelectedItem();
+        if (u == null) {
+            return;
+        }
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Reset Password");
+        ButtonType resetButton = new ButtonType("Reset", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(resetButton, ButtonType.CANCEL);
+
+        PasswordField newPassword = new PasswordField();
+        newPassword.setPromptText("New password");
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.add(new Label("New password for " + u.getUsername() + ":"), 0, 0);
+        grid.add(newPassword, 0, 1);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.showAndWait().ifPresent(result -> {
+            if (result == resetButton) {
+                String value = newPassword.getText();
+                if (value == null || value.isBlank()) {
+                    return;
+                }
+                authService.resetPassword(u.getUsername(), value);
+                refresh();
+            }
+        });
     }
 }
