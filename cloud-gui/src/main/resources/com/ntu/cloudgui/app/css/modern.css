@@ -175,6 +175,16 @@
     -fx-font-size:  14px;
 }
 
+.status-online {
+    -fx-text-fill: #22c55e;
+    -fx-font-weight: bold;
+}
+
+.status-offline {
+    -fx-text-fill: #f97316;
+    -fx-font-weight: bold;
+}
+
 .label. header {
     -fx-font-size: 24px;
     -fx-font-weight: bold;

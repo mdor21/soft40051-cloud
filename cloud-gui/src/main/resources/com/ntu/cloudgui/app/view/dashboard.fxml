@@ -16,6 +16,7 @@
         <HBox spacing="20" styleClass="top-bar">
             <Label text="NTU File Manager" styleClass="top-title"/>
             <Label fx:id="statusLabel" text="Online" />
+            <Button text="Sync Now" onAction="#handleSyncNow" styleClass="secondary"/>
             <Pane HBox.hgrow="ALWAYS"/>
             <Label fx:id="userLabel" text="User: "/>
             <Button text="Logout" onAction="#handleLogout"/>

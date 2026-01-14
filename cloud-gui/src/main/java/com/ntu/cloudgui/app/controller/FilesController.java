@@ -1,7 +1,6 @@
 package com.ntu.cloudgui.app.controller;
 
-import com.ntu.cloudgui.app.api.LoadBalancerClient;
-import com.ntu.cloudgui.app.session.SessionState;
+import com.ntu.cloudgui.app.service.FileService;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
@@ -9,7 +8,6 @@ import javafx.stage.FileChooser;
 import java.io.File;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.DialogPane;
-import javafx.util.Pair;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -23,17 +21,13 @@ public class FilesController {
     @FXML private TextArea contentArea;
     @FXML private TextField fileNameField;
 
-    private LoadBalancerClient loadBalancerClient;
+    private FileService fileService;
 
     @FXML
     public void initialize() {
-        loadBalancerClient = new LoadBalancerClient();
+        fileService = new FileService();
         setupFileListListener();
         loadRemoteFileList();
-    }
-
-    private String getCurrentUsername() {
-        return SessionState.getInstance().getCurrentUser().getUsername();
     }
 
     private void setupFileListListener() {
@@ -41,7 +35,7 @@ public class FilesController {
             if (newSelection != null) {
                 fileNameField.setText(newSelection);
                 // On selection, download the file content to the text area
-                loadBalancerClient.downloadFile(newSelection)
+                fileService.downloadFile(newSelection)
                     .thenAccept(response -> {
                         if ("OK".equals(response.status) && response.fileData != null) {
                             Platform.runLater(() -> contentArea.setText(new String(response.fileData, StandardCharsets.UTF_8)));
@@ -67,10 +61,14 @@ public class FilesController {
             showAlert("File name cannot be empty.");
             return;
         }
-        loadBalancerClient.createFile(filename, getCurrentUsername())
-            .thenAccept(response -> Platform.runLater(() -> {
-                showInfo("File created: " + filename);
-                loadRemoteFileList();
+        fileService.createFile(filename)
+            .thenAccept(result -> Platform.runLater(() -> {
+                if (result.success) {
+                    showInfo(result.message);
+                    loadRemoteFileList();
+                } else {
+                    showAlert(result.message);
+                }
             }))
             .exceptionally(ex -> {
                 Platform.runLater(() -> showAlert("Error creating file: " + ex.getMessage()));
@@ -88,10 +86,14 @@ public class FilesController {
         String content = contentArea.getText();
         byte[] fileData = content.getBytes(StandardCharsets.UTF_8);
 
-        loadBalancerClient.updateFile(selectedFile, fileData.length, fileData)
-            .thenAccept(response -> Platform.runLater(() -> {
-                showInfo("✓ Saved: " + selectedFile);
-                loadRemoteFileList(); // Reload to show updated size/date
+        fileService.saveFile(selectedFile, fileData)
+            .thenAccept(result -> Platform.runLater(() -> {
+                if (result.success) {
+                    showInfo("✓ " + result.message);
+                    loadRemoteFileList(); // Reload to show updated size/date
+                } else {
+                    showAlert(result.message);
+                }
             }))
             .exceptionally(ex -> {
                 Platform.runLater(() -> showAlert("Save error: " + ex.getMessage()));
@@ -106,12 +108,16 @@ public class FilesController {
             showAlert("Please select a file to delete.");
             return;
         }
-        loadBalancerClient.deleteFile(selectedFile, getCurrentUsername())
-            .thenAccept(response -> Platform.runLater(() -> {
-                showInfo("File deleted: " + selectedFile);
-                contentArea.clear();
-                fileNameField.clear();
-                loadRemoteFileList();
+        fileService.deleteFile(selectedFile)
+            .thenAccept(result -> Platform.runLater(() -> {
+                if (result.success) {
+                    showInfo(result.message);
+                    contentArea.clear();
+                    fileNameField.clear();
+                    loadRemoteFileList();
+                } else {
+                    showAlert(result.message);
+                }
             }))
             .exceptionally(ex -> {
                 Platform.runLater(() -> showAlert("Delete error: " + ex.getMessage()));
@@ -127,10 +133,14 @@ public class FilesController {
         if (file != null) {
             try {
                 byte[] fileData = Files.readAllBytes(file.toPath());
-                loadBalancerClient.uploadFile(file.getName(), file.length(), fileData)
-                    .thenAccept(response -> Platform.runLater(() -> {
-                        showInfo("✓ Uploaded: " + file.getName());
-                        loadRemoteFileList();
+                fileService.uploadFile(file.getName(), fileData)
+                    .thenAccept(result -> Platform.runLater(() -> {
+                        if (result.success) {
+                            showInfo("✓ " + result.message);
+                            loadRemoteFileList();
+                        } else {
+                            showAlert(result.message);
+                        }
                     }))
                     .exceptionally(ex -> {
                         Platform.runLater(() -> showAlert("Upload error: " + ex.getMessage()));
@@ -149,7 +159,7 @@ public class FilesController {
             showAlert("Select a file to download.");
             return;
         }
-        loadBalancerClient.downloadFile(selectedFile)
+        fileService.downloadFile(selectedFile)
             .thenAccept(response -> {
                 try {
                     Path downloadPath = Path.of(System.getProperty("user.home"), "Downloads", selectedFile);
@@ -167,19 +177,11 @@ public class FilesController {
     }
 
     private void loadRemoteFileList() {
-        loadBalancerClient.listFiles(getCurrentUsername())
-            .thenAccept(response -> {
-                if ("OK".equals(response.status) && response.files != null) {
-                    Platform.runLater(() -> {
-                        filesList.getItems().clear();
-                        for (LoadBalancerClient.FileMetadata file : response.files) {
-                            filesList.getItems().add(file.filename);
-                        }
-                    });
-                } else {
-                    Platform.runLater(() -> showAlert("Could not load file list: " + response.message));
-                }
-            })
+        fileService.listFilesForCurrentUser()
+            .thenAccept(files -> Platform.runLater(() -> {
+                filesList.getItems().clear();
+                filesList.getItems().addAll(files);
+            }))
             .exceptionally(ex -> {
                 Platform.runLater(() -> showAlert("Error loading remote files: " + ex.getMessage()));
                 return null;
@@ -223,19 +225,17 @@ public class FilesController {
             if (result.isPresent() && result.get().getButtonData() == ButtonBar.ButtonData.OK_DONE) {
                 String targetUsername = controller.getUsername();
                 String permission = controller.getPermission();
-                String ownerUsername = getCurrentUsername();
-
                 if (targetUsername.isEmpty()) {
                     showAlert("Target username cannot be empty.");
                     return;
                 }
 
-                loadBalancerClient.shareFile(selectedFile, ownerUsername, targetUsername, permission)
-                    .thenAccept(response -> Platform.runLater(() -> {
-                        if ("OK".equals(response.status)) {
-                            showInfo("File shared successfully with " + targetUsername);
+                fileService.shareFile(selectedFile, targetUsername, permission)
+                    .thenAccept(result -> Platform.runLater(() -> {
+                        if (result.success) {
+                            showInfo(result.message);
                         } else {
-                            showAlert("Sharing failed: " + response.message);
+                            showAlert(result.message);
                         }
                     }))
                     .exceptionally(ex -> {

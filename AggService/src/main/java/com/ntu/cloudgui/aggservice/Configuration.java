@@ -30,6 +30,7 @@ public class Configuration {
     // File server properties
     private List<String> fileServerHosts;
     private int fileServerConnections;
+    private boolean resetSchema;
 
 
     public Configuration() {
@@ -73,6 +74,9 @@ public class Configuration {
                                 .collect(Collectors.toList());
         fileServerConnections = Integer.parseInt(getProperty(props, "FILE_SERVER_MAX_CONNECTIONS", "5"));
 
+        // Load schema reset flag
+        resetSchema = Boolean.parseBoolean(getProperty(props, "RESET_SCHEMA", "false"));
+
         logger.info("Configuration loaded successfully.");
     }
 
@@ -99,4 +103,5 @@ public class Configuration {
     public String getEncryptionKey() { return encryptionKey; }
     public List<String> getFileServerHosts() { return fileServerHosts; }
     public int getFileServerConnections() { return fileServerConnections; }
+    public boolean isResetSchema() { return resetSchema; }
 }

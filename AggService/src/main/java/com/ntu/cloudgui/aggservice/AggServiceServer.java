@@ -26,13 +26,17 @@ public class AggServiceServer {
         // Initialize core components
         this.databaseManager = new DatabaseManager(config);
 
-        // Reset database schema before initializing the connection pool
-        try (java.sql.Connection schemaConnection = databaseManager.createDirectConnection()) {
-            SchemaManager schemaManager = new SchemaManager();
-            schemaManager.resetDatabaseSchema(schemaConnection);
-        } catch (java.sql.SQLException e) {
-            logger.error("Failed to apply database schema. Shutting down.", e);
-            System.exit(1); // Critical failure
+        if (config.isResetSchema()) {
+            // Reset database schema before initializing the connection pool
+            try (java.sql.Connection schemaConnection = databaseManager.createDirectConnection()) {
+                SchemaManager schemaManager = new SchemaManager();
+                schemaManager.resetDatabaseSchema(schemaConnection);
+            } catch (java.sql.SQLException e) {
+                logger.error("Failed to apply database schema. Shutting down.", e);
+                System.exit(1); // Critical failure
+            }
+        } else {
+            logger.info("RESET_SCHEMA is false; skipping schema reset.");
         }
 
         // Now that the schema is ready, initialize the connection pool

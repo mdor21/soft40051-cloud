@@ -89,7 +89,7 @@ public class AuthService {
             } else {
                 // Offline: queue the creation
                 String payload = gson.toJson(u);
-                sessionCacheRepo.queueOperation("CREATE", "USER", u.getUsername(), payload);
+                sessionCacheRepo.queueOperation(SessionCacheRepository.OP_USER_CREATE, u.getUsername(), payload);
                 logger.log(getCurrentUsername(), "CREATE_USER_OFFLINE", "Queued creation for user " + username, true);
             }
         } catch (Exception e) {
@@ -113,18 +113,18 @@ public class AuthService {
                  // Offline, we don't have the full user object, but we can queue the delete.
                  // The sync service will need to handle potential conflicts (e.g., if the user was modified).
                  String payload = "{\"username\":\"" + username + "\"}";
-                 sessionCacheRepo.queueOperation("DELETE", "USER", username, payload);
+                 sessionCacheRepo.queueOperation(SessionCacheRepository.OP_USER_DELETE, username, payload);
                  logger.log(getCurrentUsername(), "DELETE_USER_OFFLINE", "Queued deletion for user " + username, true);
                  return;
             }
 
             if (target != null) {
-                 if (online) {
+                if (online) {
                     userRepo.deleteByUsername(username);
                     logger.log(getCurrentUsername(), "DELETE_USER", "Deleted user " + username, true);
                  } else {
                     String payload = gson.toJson(target);
-                    sessionCacheRepo.queueOperation("DELETE", "USER", username, payload);
+                    sessionCacheRepo.queueOperation(SessionCacheRepository.OP_USER_DELETE, username, payload);
                     logger.log(getCurrentUsername(), "DELETE_USER_OFFLINE", "Queued deletion for user " + username, true);
                  }
             }
@@ -159,7 +159,7 @@ public class AuthService {
                     logger.log(getCurrentUsername(), "CHANGE_ROLE", "Changed role of " + username + " to " + newRole, true);
                 } else {
                     String payload = gson.toJson(target);
-                    sessionCacheRepo.queueOperation("UPDATE", "USER", username, payload);
+                    sessionCacheRepo.queueOperation(SessionCacheRepository.OP_USER_UPDATE, username, payload);
                     logger.log(getCurrentUsername(), "CHANGE_ROLE_OFFLINE", "Queued role change for user " + username, true);
                 }
             }

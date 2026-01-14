@@ -5,13 +5,31 @@ services:
   ntu-vm-soft40051:
     container_name: ntu-vm-soft40051
     image: pedrombmachado/ntu_lubuntu:soft40051
+    entrypoint: ["sh", "/usr/local/bin/ntu-vm-entrypoint.sh"]
     ports:
       - "3390:3389"   # RDP
       - "2022:22"     # SSH
     networks:
       - soft40051_network
+    env_file:
+      - ./.env
+    environment:
+      - LB_HOST=load-balancer
+      - LB_PORT=6869
+      - MYSQL_HOST=lamp-server
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DB}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - DB_HOST=lamp-server
+      - DB_PORT=3306
+      - DB_NAME=${MYSQL_DB}
+      - DB_USER=${MYSQL_USER}
+      - DB_PASS=${MYSQL_PASSWORD}
     volumes:
       - docker_soft40051:/home/ntu-user/NetBeansProjects
+      - sqlite_data:/home/ntu-user/.local/share/comp20081
+      - ./scripts/ntu-vm-entrypoint.sh:/usr/local/bin/ntu-vm-entrypoint.sh:ro
     restart: unless-stopped
 
   # Database - Core dependency
@@ -32,8 +50,9 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./config/mysql:/docker-entrypoint-initdb.d
+      - ./scripts/mysql-init.sh:/usr/local/bin/mysql-init.sh:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "sh /usr/local/bin/mysql-init.sh && mysqladmin ping -h localhost"]
       timeout: 20s
       retries: 10
     restart: unless-stopped
@@ -60,6 +79,8 @@ services:
     container_name: aggregator
     expose:
       - "${AGG_PORT}"
+    ports:
+      - "9000:${AGG_PORT}"
     networks:
       - soft40051_network
     volumes:
@@ -76,6 +97,7 @@ services:
       - SFTP_USER=ntu-user
       - SERVER_PORT=${AGG_PORT}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - RESET_SCHEMA=false
     depends_on:
       lamp-server:
         condition: service_healthy
@@ -99,6 +121,8 @@ services:
     container_name: load-balancer
     expose:
       - "${LB_PORT}"
+    ports:
+      - "6869:${LB_PORT}"
     networks:
       - soft40051_network
     env_file:
@@ -224,3 +248,4 @@ volumes:
   mqtt_data:
   jenkins_data:
   gitea_data:
+  sqlite_data:

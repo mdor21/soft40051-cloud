@@ -60,6 +60,7 @@ public class MainApp extends Application {
 
         // 2. Close the MySQL database connection
         DatabaseManager.closeMySqlConnection();
+        DatabaseManager.closeSqliteConnection();
 
         super.stop();
     }

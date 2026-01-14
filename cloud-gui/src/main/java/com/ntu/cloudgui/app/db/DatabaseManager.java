@@ -9,6 +9,7 @@ import java.sql.SQLException;
 public class DatabaseManager {
 
     private static Connection mysqlConnection;
+    private static Connection sqliteConnection;
 
     /**
      * Initializes the databases. Establishes the initial MySQL connection.
@@ -16,6 +17,7 @@ public class DatabaseManager {
     public static void initializeDatabases() {
         // Initialize SQLite database
         try {
+            sqliteConnection = LocalDatabaseInitializer.init();
             SessionCacheRepository sessionCacheRepository = new SessionCacheRepository();
             sessionCacheRepository.initSchema();
         } catch (Exception e) {
@@ -44,6 +46,17 @@ public class DatabaseManager {
         return mysqlConnection;
     }
 
+    public static synchronized Connection getSqliteConnection() throws SQLException {
+        try {
+            if (sqliteConnection == null || sqliteConnection.isClosed()) {
+                sqliteConnection = LocalDatabaseInitializer.init();
+            }
+            return sqliteConnection;
+        } catch (Exception e) {
+            throw new SQLException("Failed to initialize SQLite connection", e);
+        }
+    }
+
     /**
      * Checks if the MySQL database is connected by validating the existing connection.
      * This is much more efficient than creating a new connection for each check.
@@ -70,6 +83,17 @@ public class DatabaseManager {
             }
         } catch (SQLException e) {
              System.err.println("Failed to close MySQL connection: " + e.getMessage());
+        }
+    }
+
+    public static void closeSqliteConnection() {
+        try {
+            if (sqliteConnection != null && !sqliteConnection.isClosed()) {
+                sqliteConnection.close();
+                System.out.println("SQLite connection closed.");
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to close SQLite connection: " + e.getMessage());
         }
     }
 }

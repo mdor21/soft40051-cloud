@@ -1,17 +1,20 @@
 package com.ntu.cloudgui.app.db;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class SqliteConnectionManager {
 
-    // SQLite file inside main container (same directory where the app runs)
-    private static final String DB_FILE = "comp20081.db";
-
-    private static final String URL = "jdbc:sqlite:" + DB_FILE;
+    private static final String URL = LocalDatabaseInitializer.getJdbcUrl();
 
     public static Connection getConnection() throws SQLException {
+        try {
+            LocalDatabaseInitializer.ensureDatabaseDirectory();
+        } catch (IOException e) {
+            throw new SQLException("Failed to create SQLite data directory", e);
+        }
         return DriverManager.getConnection(URL);
     }
 }
