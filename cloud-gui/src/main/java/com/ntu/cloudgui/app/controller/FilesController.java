@@ -221,8 +221,8 @@ public class FilesController {
             dialog.setDialogPane(dialogPane);
             dialog.setTitle("Share File");
 
-            Optional<ButtonType> result = dialog.showAndWait();
-            if (result.isPresent() && result.get().getButtonData() == ButtonBar.ButtonData.OK_DONE) {
+            Optional<ButtonType> dialogResult = dialog.showAndWait();
+            if (dialogResult.isPresent() && dialogResult.get().getButtonData() == ButtonBar.ButtonData.OK_DONE) {
                 String targetUsername = controller.getUsername();
                 String permission = controller.getPermission();
                 if (targetUsername.isEmpty()) {

@@ -18,6 +18,8 @@ public class Configuration {
     private String dbName;
     private String dbUser;
     private String dbPass;
+    private int dbConnectRetries;
+    private int dbConnectDelayMs;
 
     // AggService properties
     private int aggServicePort;
@@ -55,6 +57,8 @@ public class Configuration {
         dbName = getProperty(props, "MYSQL_DATABASE", "dbtutorial");
         dbUser = getProperty(props, "MYSQL_USER", "admin");
         dbPass = getProperty(props, "MYSQL_PASSWORD", "admin");
+        dbConnectRetries = Integer.parseInt(getProperty(props, "DB_CONNECT_RETRIES", "10"));
+        dbConnectDelayMs = Integer.parseInt(getProperty(props, "DB_CONNECT_DELAY_MS", "3000"));
 
         // Load AggService configuration
         aggServicePort = Integer.parseInt(getProperty(props, "SERVER_PORT", "9000"));
@@ -97,6 +101,8 @@ public class Configuration {
     public String getDbName() { return dbName; }
     public String getDbUser() { return dbUser; }
     public String getDbPass() { return dbPass; }
+    public int getDbConnectRetries() { return dbConnectRetries; }
+    public int getDbConnectDelayMs() { return dbConnectDelayMs; }
     public int getAggServicePort() { return aggServicePort; }
     public int getThreadPoolSize() { return threadPoolSize; }
     public int getChunkSize() { return chunkSize; }

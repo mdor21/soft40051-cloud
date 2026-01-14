@@ -52,9 +52,11 @@ services:
       - ./config/mysql:/docker-entrypoint-initdb.d
       - ./scripts/mysql-init.sh:/usr/local/bin/mysql-init.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "sh /usr/local/bin/mysql-init.sh && mysqladmin ping -h localhost"]
+      test: ["CMD-SHELL", "sh /usr/local/bin/mysql-init.sh"]
+      interval: 10s
       timeout: 20s
-      retries: 10
+      retries: 15
+      start_period: 30s
     restart: unless-stopped
 
   # MQTT Broker

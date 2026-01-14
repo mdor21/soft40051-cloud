@@ -40,7 +40,7 @@ public class AggServiceServer {
         }
 
         // Now that the schema is ready, initialize the connection pool
-        databaseManager.initializePool();
+        initializePoolWithRetry(config);
 
         this.fileMetadataRepository = new FileMetadataRepository(databaseManager);
         ChunkMetadataRepository chunkMetadataRepository = new ChunkMetadataRepository(databaseManager);
@@ -85,6 +85,31 @@ public class AggServiceServer {
             logger.error("Could not start server on port {}", port, e);
         } finally {
             shutdown();
+        }
+    }
+
+    private void initializePoolWithRetry(Configuration config) {
+        int retries = config.getDbConnectRetries();
+        int delayMs = config.getDbConnectDelayMs();
+        int attempt = 0;
+        while (true) {
+            attempt++;
+            try {
+                databaseManager.initializePool();
+                return;
+            } catch (RuntimeException e) {
+                databaseManager.closePool();
+                if (attempt >= retries) {
+                    throw e;
+                }
+                logger.warn("Database not ready (attempt {}/{}). Retrying in {}ms.", attempt, retries, delayMs);
+                try {
+                    Thread.sleep(delayMs);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
         }
     }
 
