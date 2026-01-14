@@ -8,6 +8,9 @@ RUN mvn clean package
 # Stage 2: Create the runtime image
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/target/aggservice-1.0.0.jar ./aggservice.jar
 EXPOSE 9000
 CMD ["java", "-jar", "aggservice.jar"]

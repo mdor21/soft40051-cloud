@@ -18,6 +18,7 @@ public class StorageConnectivityVerification {
         List<String> storageNodes = Arrays.asList(storageNodesEnv.split(","));
         String sftpUser = System.getenv("SFTP_USER");
         String sftpPass = System.getenv("SFTP_PASS");
+        int sftpPort = resolveSftpPort();
 
         if (sftpUser == null || sftpPass == null) {
             System.err.println("SFTP_USER or SFTP_PASS environment variables not set.");
@@ -30,7 +31,7 @@ public class StorageConnectivityVerification {
             Session session = null;
             ChannelSftp channelSftp = null;
             try {
-                session = jsch.getSession(sftpUser, host, 22);
+                session = jsch.getSession(sftpUser, host, sftpPort);
                 session.setPassword(sftpPass);
                 session.setConfig("StrictHostKeyChecking", "no");
                 session.connect();
@@ -65,6 +66,19 @@ public class StorageConnectivityVerification {
                 }
                 System.out.println("--------------------");
             }
+        }
+    }
+
+    private static int resolveSftpPort() {
+        String rawPort = System.getenv("SFTP_PORT");
+        if (rawPort == null || rawPort.isBlank()) {
+            return 22;
+        }
+        try {
+            return Integer.parseInt(rawPort);
+        } catch (NumberFormatException e) {
+            System.err.println("Invalid SFTP_PORT '" + rawPort + "', falling back to 22");
+            return 22;
         }
     }
 }

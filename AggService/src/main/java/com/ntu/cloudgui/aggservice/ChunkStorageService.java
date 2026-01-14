@@ -19,6 +19,7 @@ public class ChunkStorageService {
     private final Map<String, Semaphore> fileServerSemaphores;
     private final String sftpUser;
     private final String sftpPass;
+    private final int sftpPort;
     private int nextServer = 0;
 
     public ChunkStorageService(Configuration config) {
@@ -27,11 +28,13 @@ public class ChunkStorageService {
                 .collect(Collectors.toConcurrentMap(host -> host, host -> new Semaphore(1)));
         this.sftpUser = System.getenv("SFTP_USER");
         this.sftpPass = System.getenv("SFTP_PASS");
+        this.sftpPort = resolveSftpPort();
         logger.info("ChunkStorageService initialized for hosts: {}", String.join(", ", fileServerHosts));
     }
 
     public String storeChunk(byte[] chunkData, String fileId, int chunkIndex) throws ProcessingException {
         String server = selectNextServer();
+        // storage_path is recorded under the /data storage root (fileId/chunk_N.enc).
         String remotePath = String.format("/data/%s/chunk_%d.enc", fileId, chunkIndex);
         Semaphore semaphore = fileServerSemaphores.get(server);
 
@@ -42,7 +45,7 @@ public class ChunkStorageService {
         try {
             semaphore.acquire();
             logger.debug("Acquired semaphore for server: {}", server);
-            upload(server, sftpUser, sftpPass, 22, new ByteArrayInputStream(chunkData), remotePath);
+            upload(server, sftpUser, sftpPass, sftpPort, new ByteArrayInputStream(chunkData), remotePath);
             return server;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -67,7 +70,7 @@ public class ChunkStorageService {
         try {
             semaphore.acquire();
             logger.debug("Acquired semaphore for server: {}", server);
-            download(server, sftpUser, sftpPass, 22, remotePath, outputStream);
+            download(server, sftpUser, sftpPass, sftpPort, remotePath, outputStream);
             return outputStream.toByteArray();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -91,7 +94,7 @@ public class ChunkStorageService {
         try {
             semaphore.acquire();
             logger.debug("Acquired semaphore for server: {}", server);
-            delete(server, sftpUser, sftpPass, 22, remotePath);
+            delete(server, sftpUser, sftpPass, sftpPort, remotePath);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ProcessingException("Interrupted while waiting to delete chunk " + chunkIndex, e);
@@ -107,6 +110,19 @@ public class ChunkStorageService {
         String server = fileServerHosts.get(nextServer);
         nextServer = (nextServer + 1) % fileServerHosts.size();
         return server;
+    }
+
+    private int resolveSftpPort() {
+        String rawPort = System.getenv("SFTP_PORT");
+        if (rawPort == null || rawPort.isBlank()) {
+            return 22;
+        }
+        try {
+            return Integer.parseInt(rawPort);
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid SFTP_PORT '{}', falling back to 22", rawPort);
+            return 22;
+        }
     }
 
     protected void upload(String host, String user, String password, int port, InputStream in, String remotePath) throws JSchException, SftpException {

@@ -97,6 +97,7 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - STORAGE_NODES=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
       - SFTP_USER=ntu-user
+      - SFTP_PORT=${SFTP_PORT}
       - SERVER_PORT=${AGG_PORT}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - RESET_SCHEMA=false
@@ -157,7 +158,7 @@ services:
     image: lscr.io/linuxserver/openssh-server:latest
     container_name: soft40051-files-container1
     ports:
-      - "4848:22"
+      - "4848:2222"
     networks:
       - soft40051_network
     environment:
@@ -166,6 +167,7 @@ services:
       - TZ=Etc/UTC
       - USER_NAME=ntu-user
       - USER_PASSWORD=${SFTP_PASS}
+      - PASSWORD_ACCESS=${PASSWORD_ACCESS}
       - SUDO_ACCESS=true
     volumes:
       - ./storage/node1:/data
@@ -175,7 +177,7 @@ services:
     image: lscr.io/linuxserver/openssh-server:latest
     container_name: soft40051-files-container2
     ports:
-      - "4849:22"
+      - "4849:2222"
     networks:
       - soft40051_network
     environment:
@@ -184,6 +186,7 @@ services:
       - TZ=Etc/UTC
       - USER_NAME=ntu-user
       - USER_PASSWORD=${SFTP_PASS}
+      - PASSWORD_ACCESS=${PASSWORD_ACCESS}
       - SUDO_ACCESS=true
     volumes:
       - ./storage/node2:/data
@@ -193,7 +196,7 @@ services:
     image: lscr.io/linuxserver/openssh-server:latest
     container_name: soft40051-files-container3
     ports:
-      - "4850:22"
+      - "4850:2222"
     networks:
       - soft40051_network
     environment:
@@ -202,6 +205,7 @@ services:
       - TZ=Etc/UTC
       - USER_NAME=ntu-user
       - USER_PASSWORD=${SFTP_PASS}
+      - PASSWORD_ACCESS=${PASSWORD_ACCESS}
       - SUDO_ACCESS=true
     volumes:
       - ./storage/node3:/data
@@ -211,7 +215,7 @@ services:
     image: lscr.io/linuxserver/openssh-server:latest
     container_name: soft40051-files-container4
     ports:
-      - "4851:22"
+      - "4851:2222"
     networks:
       - soft40051_network
     environment:
@@ -220,6 +224,7 @@ services:
       - TZ=Etc/UTC
       - USER_NAME=ntu-user
       - USER_PASSWORD=${SFTP_PASS}
+      - PASSWORD_ACCESS=${PASSWORD_ACCESS}
       - SUDO_ACCESS=true
     volumes:
       - ./storage/node4:/data

@@ -38,6 +38,7 @@ public class FileProcessingService {
 
     public String processAndStoreFile(String filename, byte[] fileData, String username, String fileId) throws ProcessingException {
         String effectiveUsername = normalizeUsername(username);
+        // Current coursework flow provides fileId as the original filename (file_id == original_filename).
         String effectiveFileId = normalizeFileId(fileId);
         try {
             // 1. Encrypt the entire file
@@ -69,6 +70,7 @@ public class FileProcessingService {
                 chunkMetadata.setChunkIndex(chunkIndex);
                 chunkMetadata.setCrc32(crc32);
                 chunkMetadata.setFileServerName(server);
+                // Persist storage_path under the /data storage root for this chunk.
                 chunkMetadata.setChunkPath(String.format("/data/%s/chunk_%d.enc", effectiveFileId, chunkIndex));
                 chunkMetadata.setChunkSize(length);
                 chunkMetadataRepository.save(chunkMetadata);
@@ -171,6 +173,7 @@ public class FileProcessingService {
     }
 
     private String normalizeFileId(String fileId) {
+        // Preserve caller-provided file IDs (currently the filename); fall back to UUID when absent.
         if (fileId == null || fileId.isBlank()) {
             return UUID.randomUUID().toString();
         }
