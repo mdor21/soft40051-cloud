@@ -10,22 +10,26 @@
 
 <VBox xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="com.ntu.cloudgui.app.controller.RemoteTerminalController"
-      spacing="5">
+      spacing="10">
     <padding>
-        <Insets top="10" right="10" bottom="10" left="10"/>
+        <Insets top="15" right="15" bottom="15" left="15"/>
     </padding>
 
-    <HBox spacing="5">
-        <TextField fx:id="hostField" promptText="Host (file server container)"/>
-        <TextField fx:id="portField" promptText="Port" text="22"/>
+    <HBox spacing="10">
+        <TextField fx:id="hostField" HBox.hgrow="ALWAYS" promptText="Host (file server container)"/>
+        <TextField fx:id="portField" prefWidth="60" promptText="Port" text="22"/>
         <TextField fx:id="userField" promptText="User"/>
         <PasswordField fx:id="passwordField" promptText="Password"/>
     </HBox>
 
-    <TextArea fx:id="remoteOutputArea" editable="false" prefRowCount="20"/>
+    <TextArea fx:id="remoteOutputArea" 
+              editable="false" 
+              VBox.vgrow="ALWAYS"/>
 
-    <HBox spacing="5">
-        <TextField fx:id="remoteCommandField" promptText="Remote command"/>
+    <HBox spacing="10">
+        <TextField fx:id="remoteCommandField" 
+                   HBox.hgrow="ALWAYS" 
+                   promptText="Remote command"/>
         <Button text="Run" onAction="#handleRun"/>
     </HBox>
 </VBox>
