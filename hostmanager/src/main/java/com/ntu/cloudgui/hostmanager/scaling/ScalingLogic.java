@@ -25,7 +25,7 @@ public class ScalingLogic {
 
     private static final Logger logger = LogManager.getLogger(ScalingLogic.class);
     private static final String CONTAINER_BASE_NAME = "soft40051-files-container";
-    private static final String IMAGE_NAME = "lscr.io/linuxserver/openssh-server:latest";
+    private static final String IMAGE_NAME = "pedrombmachado/simple-ssh-container:base";
     private static final String NETWORK_NAME = "soft40051_network";
     private static final int MIN_PORT = 4848;
     private static final int MAX_CONTAINERS = 4;
@@ -165,14 +165,14 @@ public class ScalingLogic {
         envVars.put("PUID", getEnvOrDefault("PUID", "1000"));
         envVars.put("PGID", getEnvOrDefault("PGID", "1000"));
         envVars.put("TZ", getEnvOrDefault("TZ", "Etc/UTC"));
-        envVars.put("USER_NAME", getEnvOrDefault("SFTP_USER", "ntu-user"));
+        envVars.put("SSH_USERNAME", getEnvOrDefault("SFTP_USER", "ntu-user"));
 
         String sftpPass = System.getenv("SFTP_PASS");
         if (sftpPass == null || sftpPass.isBlank()) {
             logger.warn("SFTP_PASS is not set; storage container will start with an empty password");
             sftpPass = "";
         }
-        envVars.put("USER_PASSWORD", sftpPass);
+        envVars.put("SSH_PASSWORD", sftpPass);
         envVars.put("SUDO_ACCESS", "true");
 
         return envVars;

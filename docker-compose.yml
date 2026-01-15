@@ -96,7 +96,7 @@ services:
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - STORAGE_NODES=soft40051-files-container1,soft40051-files-container2,soft40051-files-container3,soft40051-files-container4
-      - SFTP_USER=ntu-user
+      - SFTP_USER=${SFTP_USER}
       - SFTP_PORT=${SFTP_PORT}
       - SERVER_PORT=${AGG_PORT}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
@@ -155,76 +155,60 @@ services:
 
   # SFTP Storage Nodes
   soft40051-files-container1:
-    image: lscr.io/linuxserver/openssh-server:latest
+    image: pedrombmachado/simple-ssh-container:base
     container_name: soft40051-files-container1
     ports:
-      - "4848:2222"
+      - "4848:22"
     networks:
       - soft40051_network
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - USER_NAME=ntu-user
-      - USER_PASSWORD=${SFTP_PASS}
-      - PASSWORD_ACCESS=${PASSWORD_ACCESS}
+      - SSH_USERNAME=${SFTP_USER}
+      - SSH_PASSWORD=${SFTP_PASS}
       - SUDO_ACCESS=true
     volumes:
       - ./storage/node1:/data
     restart: unless-stopped
 
   soft40051-files-container2:
-    image: lscr.io/linuxserver/openssh-server:latest
+    image: pedrombmachado/simple-ssh-container:base
     container_name: soft40051-files-container2
     ports:
-      - "4849:2222"
+      - "4849:22"
     networks:
       - soft40051_network
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - USER_NAME=ntu-user
-      - USER_PASSWORD=${SFTP_PASS}
-      - PASSWORD_ACCESS=${PASSWORD_ACCESS}
+      - SSH_USERNAME=${SFTP_USER}
+      - SSH_PASSWORD=${SFTP_PASS}
       - SUDO_ACCESS=true
     volumes:
       - ./storage/node2:/data
     restart: unless-stopped
 
   soft40051-files-container3:
-    image: lscr.io/linuxserver/openssh-server:latest
+    image: pedrombmachado/simple-ssh-container:base
     container_name: soft40051-files-container3
     ports:
-      - "4850:2222"
+      - "4850:22"
     networks:
       - soft40051_network
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - USER_NAME=ntu-user
-      - USER_PASSWORD=${SFTP_PASS}
-      - PASSWORD_ACCESS=${PASSWORD_ACCESS}
+      - SSH_USERNAME=${SFTP_USER}
+      - SSH_PASSWORD=${SFTP_PASS}
       - SUDO_ACCESS=true
     volumes:
       - ./storage/node3:/data
     restart: unless-stopped
 
   soft40051-files-container4:
-    image: lscr.io/linuxserver/openssh-server:latest
+    image: pedrombmachado/simple-ssh-container:base
     container_name: soft40051-files-container4
     ports:
-      - "4851:2222"
+      - "4851:22"
     networks:
       - soft40051_network
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - USER_NAME=ntu-user
-      - USER_PASSWORD=${SFTP_PASS}
-      - PASSWORD_ACCESS=${PASSWORD_ACCESS}
+      - SSH_USERNAME=${SFTP_USER}
+      - SSH_PASSWORD=${SFTP_PASS}
       - SUDO_ACCESS=true
     volumes:
       - ./storage/node4:/data
