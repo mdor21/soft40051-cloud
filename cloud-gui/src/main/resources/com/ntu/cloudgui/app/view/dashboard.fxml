@@ -7,35 +7,54 @@
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.geometry.Insets?>
 
 <BorderPane xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="com.ntu.cloudgui.app.controller.DashboardController"
-            prefWidth="1200" prefHeight="700" styleClass="root">
+            prefWidth="1200" prefHeight="750" 
+            styleClass="root">
 
     <top>
-        <HBox spacing="20" styleClass="top-bar">
+        <HBox spacing="20" styleClass="top-bar" alignment="CENTER_LEFT">
             <Label text="NTU File Manager" styleClass="top-title"/>
-            <Label fx:id="statusLabel" text="Online" />
+            
+            <Label fx:id="statusLabel" text="Online" styleClass="status-online"/>
+            
             <Button text="Sync Now" onAction="#handleSyncNow" styleClass="secondary"/>
+            
             <Pane HBox.hgrow="ALWAYS"/>
-            <Label fx:id="userLabel" text="User: "/>
+            
+            <Label fx:id="userLabel" text="User: admin" styleClass="label"/>
             <Button text="Change Password" onAction="#handleChangePassword" styleClass="secondary"/>
-            <Button text="Logout" onAction="#handleLogout"/>
+            <Button text="Logout" onAction="#handleLogout" styleClass="button, danger"/>
         </HBox>
     </top>
 
     <left>
-        <VBox spacing="10" styleClass="side-bar">
-            <Button text="Files" onAction="#showFiles"/>
-            <Button text="Local Terminal" onAction="#showLocalTerminal"/>
-            <Button text="Remote Terminal" onAction="#showRemoteTerminal"/>
-            <Button fx:id="usersButton" text="Users" onAction="#showUsers"/>
-            <Button fx:id="logsButton" text="Logs" onAction="#showLogs"/>
+        <VBox spacing="8" styleClass="side-bar" prefWidth="240">
+            <Button text="Files" onAction="#showFiles" 
+                    maxWidth="Infinity" styleClass="button-nav"/>
+                    
+            <Button text="Local Terminal" onAction="#showLocalTerminal" 
+                    maxWidth="Infinity" styleClass="button-nav"/>
+                    
+            <Button text="Remote Terminal" onAction="#showRemoteTerminal" 
+                    maxWidth="Infinity" styleClass="button-nav"/>
+                    
+            <Button fx:id="usersButton" text="Users" onAction="#showUsers" 
+                    maxWidth="Infinity" styleClass="button-nav"/>
+                    
+            <Button fx:id="logsButton" text="Logs" onAction="#showLogs" 
+                    maxWidth="Infinity" styleClass="button-nav"/>
         </VBox>
     </left>
 
     <center>
-        <StackPane fx:id="contentPane"/>
+        <StackPane fx:id="contentPane">
+            <padding>
+                <Insets top="20" right="20" bottom="20" left="20"/>
+            </padding>
+        </StackPane>
     </center>
 
 </BorderPane>
