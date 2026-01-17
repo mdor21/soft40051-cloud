@@ -32,7 +32,7 @@ pipeline {
               script: "find . -name pom.xml -not -path './.git/*' -print",
               returnStdout: true
             ).trim()
-            pomList = raw ? raw.split('\n') : []
+            pomList = raw ? raw.readLines() : []
           }
           if (pomList.isEmpty()) {
             error 'No pom.xml found. Set MAVEN_POMS to your project pom.xml paths.'
