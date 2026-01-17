@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.*;
 
 public class ScalingLogicTest {
@@ -45,11 +46,13 @@ public class ScalingLogicTest {
     @Test
     public void testHandleScaleUp_shouldStartOneContainer() {
         when(containerManager.getAllContainers()).thenReturn(Collections.emptyList());
-        when(dockerExecutor.runContainer(anyString(), anyInt(), anyString())).thenReturn(new ProcessResult(0, "success", ""));
+        when(dockerExecutor.runContainer(anyString(), anyInt(), anyString(), anyString(), anyMap(), anyMap()))
+                .thenReturn(new ProcessResult(0, "success", ""));
 
         scalingLogic.handleScaleUp(1);
 
-        verify(dockerExecutor, times(1)).runContainer(eq("soft40051-files-container1"), eq(4848), anyString());
+        verify(dockerExecutor, times(1))
+                .runContainer(eq("soft40051-files-container1"), eq(4848), anyString(), anyString(), anyMap(), anyMap());
         verify(containerManager, times(1)).addContainer("soft40051-files-container1");
         verify(eventPublisher, times(1)).publishScalingEvent("up", "soft40051-files-container1");
     }
@@ -57,11 +60,13 @@ public class ScalingLogicTest {
     @Test
     public void testHandleScaleUp_shouldFillGap() {
         when(containerManager.getAllContainers()).thenReturn(createContainerInfoList("soft40051-files-container1", "soft40051-files-container3"));
-        when(dockerExecutor.runContainer(anyString(), anyInt(), anyString())).thenReturn(new ProcessResult(0, "success", ""));
+        when(dockerExecutor.runContainer(anyString(), anyInt(), anyString(), anyString(), anyMap(), anyMap()))
+                .thenReturn(new ProcessResult(0, "success", ""));
 
         scalingLogic.handleScaleUp(1);
 
-        verify(dockerExecutor, times(1)).runContainer(eq("soft40051-files-container2"), eq(4849), anyString());
+        verify(dockerExecutor, times(1))
+                .runContainer(eq("soft40051-files-container2"), eq(4849), anyString(), anyString(), anyMap(), anyMap());
         verify(containerManager, times(1)).addContainer("soft40051-files-container2");
         verify(eventPublisher, times(1)).publishScalingEvent("up", "soft40051-files-container2");
     }
@@ -77,7 +82,7 @@ public class ScalingLogicTest {
 
         scalingLogic.handleScaleUp(1);
 
-        verify(dockerExecutor, never()).runContainer(anyString(), anyInt(), anyString());
+        verify(dockerExecutor, never()).runContainer(anyString(), anyInt(), anyString(), anyString(), anyMap(), anyMap());
     }
 
     @Test
