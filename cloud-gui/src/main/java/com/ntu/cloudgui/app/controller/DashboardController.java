@@ -21,21 +21,34 @@ import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import java.io.IOException;
+import java.util.List;
 
 public class DashboardController {
 
     @FXML private Label statusLabel;
     @FXML private Label userLabel;
+    @FXML private Button filesButton;
+    @FXML private Button localTerminalButton;
+    @FXML private Button remoteTerminalButton;
     @FXML private Button usersButton;
     @FXML private Button logsButton;
     @FXML private StackPane contentPane;
     private Timeline statusTimer;
+    private List<Button> navButtons;
 
     @FXML
     private void initialize() {
         userLabel.setText("User: " + SessionState.getInstance().getCurrentUser().getUsername());
         updateStatusLabel();
         startStatusTimer();
+
+        navButtons = List.of(
+            filesButton,
+            localTerminalButton,
+            remoteTerminalButton,
+            usersButton,
+            logsButton
+        );
 
         boolean isAdmin = SessionState.getInstance().isAdmin();
         usersButton.setVisible(isAdmin);
@@ -55,26 +68,31 @@ public class DashboardController {
 
     @FXML
     private void showFiles() {
+        setActiveButton(filesButton);
         setContent("/com/ntu/cloudgui/app/view/files.fxml");
     }
 
     @FXML
     private void showLocalTerminal() {
+        setActiveButton(localTerminalButton);
         setContent("/com/ntu/cloudgui/app/view/local_terminal.fxml");
     }
 
     @FXML
     private void showRemoteTerminal() {
+        setActiveButton(remoteTerminalButton);
         setContent("/com/ntu/cloudgui/app/view/remote_terminal.fxml");
     }
 
     @FXML
     private void showUsers() {
+        setActiveButton(usersButton);
         setContent("/com/ntu/cloudgui/app/view/users.fxml");
     }
 
     @FXML
     private void showLogs() {
+        setActiveButton(logsButton);
         setContent("/com/ntu/cloudgui/app/view/logs.fxml");
     }
 
@@ -162,6 +180,16 @@ public class DashboardController {
         statusLabel.setText(online ? "Online" : "Offline");
         statusLabel.getStyleClass().removeAll("status-online", "status-offline");
         statusLabel.getStyleClass().add(online ? "status-online" : "status-offline");
+    }
+
+    private void setActiveButton(Button activeButton) {
+        if (navButtons == null) {
+            return;
+        }
+        navButtons.forEach(btn -> btn.getStyleClass().remove("active"));
+        if (activeButton != null && !activeButton.getStyleClass().contains("active")) {
+            activeButton.getStyleClass().add("active");
+        }
     }
 
     private void showAlert(String message) {

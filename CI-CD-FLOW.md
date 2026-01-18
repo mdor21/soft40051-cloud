@@ -86,4 +86,3 @@ Database initialization is handled automatically via mounted init scripts and he
 5. Jenkins runs `mvn clean verify` for all modules.
 6. Jenkins displays Green/Red status in the UI.
 7. Explain that Host Manager handles runtime scaling via MQTT + Docker commands, not Jenkins.
-

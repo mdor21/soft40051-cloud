@@ -32,13 +32,13 @@
 
     <left>
         <VBox spacing="8" styleClass="side-bar" prefWidth="240">
-            <Button text="Files" onAction="#showFiles" 
+            <Button fx:id="filesButton" text="Files" onAction="#showFiles" 
                     maxWidth="Infinity" styleClass="button-nav"/>
                     
-            <Button text="Local Terminal" onAction="#showLocalTerminal" 
+            <Button fx:id="localTerminalButton" text="Local Terminal" onAction="#showLocalTerminal" 
                     maxWidth="Infinity" styleClass="button-nav"/>
                     
-            <Button text="Remote Terminal" onAction="#showRemoteTerminal" 
+            <Button fx:id="remoteTerminalButton" text="Remote Terminal" onAction="#showRemoteTerminal" 
                     maxWidth="Infinity" styleClass="button-nav"/>
                     
             <Button fx:id="usersButton" text="Users" onAction="#showUsers" 
